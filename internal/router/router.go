@@ -65,7 +65,7 @@ func getURLHandler(res http.ResponseWriter, req *http.Request) {
         return
     }
 
-    shortURL := req.PathValue("id")
+    shortURL := req.URL.Path[1:]
     if shortURL == "" {
         http.Error(res, "id parameter is missing", http.StatusBadRequest)
         return
