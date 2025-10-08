@@ -5,6 +5,8 @@ import (
     "net/http"
     "sync"
     "io"
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/chi/v5/middleware"
     "go-musthave-shortener-tpl/internal/helpers"
 )
 
@@ -20,9 +22,11 @@ func init() {
 }
 
 func Start() {
-    router := http.NewServeMux()
-    router.HandleFunc("/", postURLHandler)
-    router.HandleFunc("/{id}", getURLHandler)
+    router := chi.NewRouter()
+    router.Use(middleware.Logger)
+
+    router.Post("/", postURLHandler)
+    router.Get("/{id}", getURLHandler)
 
     err := http.ListenAndServe(":8080", router)
     if err != nil {
