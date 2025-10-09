@@ -1,7 +1,11 @@
 package main
 
-import "go-musthave-shortener-tpl/internal/router"
+import (
+	  "go-musthave-shortener-tpl/internal/config"
+	  "go-musthave-shortener-tpl/internal/router"
+)
 
 func main() {
-    router.Start()
+	  a, b := config.Servers()
+	  router.Start(a, b)
 }

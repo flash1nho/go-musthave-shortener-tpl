@@ -10,6 +10,8 @@ import (
 )
 
 func TestPostURLHandler(t *testing.T) {
+    handler := &postHandlerStruct{url: "localhost:8080"}
+
     // описываем набор данных: метод запроса, ожидаемый код ответа, тело ответа, тело запроса
     testCases := []struct {
         method       string
@@ -30,7 +32,7 @@ func TestPostURLHandler(t *testing.T) {
             w := httptest.NewRecorder()
 
             // вызовем хендлер как обычную функцию, без запуска самого сервера
-            postURLHandler(w, r)
+            handler.postURLHandler(w, r)
 
             assert.Equal(t, tc.status, w.Code, "Код ответа не совпадает с ожидаемым")
             // проверим корректность полученного тела ответа, если мы его ожидаем

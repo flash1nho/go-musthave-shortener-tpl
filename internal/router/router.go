@@ -5,9 +5,11 @@ import (
     "net/http"
     "sync"
     "io"
+
+    "go-musthave-shortener-tpl/internal/helpers"
+
     "github.com/go-chi/chi/v5"
     "github.com/go-chi/chi/v5/middleware"
-    "go-musthave-shortener-tpl/internal/helpers"
 )
 
 var urlStore = struct {
@@ -21,20 +23,47 @@ func init() {
     }
 }
 
-func Start() {
-    router := chi.NewRouter()
-    router.Use(middleware.Logger)
+type postHandlerStruct struct {
+    url string
+}
 
-    router.Post("/", postURLHandler)
-    router.Get("/{id}", getURLHandler)
+func Start(a string, b string) {
+    if a == b {
+        serverA := chi.NewRouter()
+        serverA.Use(middleware.Logger)
+        handler := postHandlerStruct{url: a}
+        serverA.Post("/", handler.postURLHandler)
+        serverA.Get("/{id}", getURLHandler)
 
-    err := http.ListenAndServe(":8080", router)
-    if err != nil {
-        panic(err)
+        err := http.ListenAndServe(a, serverA)
+        if err != nil {
+            panic(err)
+        }
+    } else {
+        serverA := chi.NewRouter()
+        serverA.Use(middleware.Logger)
+        handler := postHandlerStruct{url: b}
+        serverA.Post("/", handler.postURLHandler)
+
+        serverB := chi.NewRouter()
+        serverB.Use(middleware.Logger)
+        serverB.Get("/{id}", getURLHandler)
+
+        go func() {
+            err := http.ListenAndServe(a, serverA)
+            if err != nil {
+                panic(err)
+            }
+        }()
+
+        err := http.ListenAndServe(b, serverB)
+        if err != nil {
+            panic(err)
+        }
     }
 }
 
-func postURLHandler(res http.ResponseWriter, req *http.Request) {
+func (b postHandlerStruct) postURLHandler(res http.ResponseWriter, req *http.Request) {
     if req.Method != http.MethodPost {
         http.Error(res, "Method not allowed", http.StatusBadRequest)
         return
@@ -60,7 +89,7 @@ func postURLHandler(res http.ResponseWriter, req *http.Request) {
     urlStore.Unlock()
 
     res.WriteHeader(http.StatusCreated)
-    fmt.Fprintf(res, "http://localhost:8080/%s", shortURL)
+    fmt.Fprintf(res, "http://%s/%s", b.url, shortURL)
 }
 
 func getURLHandler(res http.ResponseWriter, req *http.Request) {
