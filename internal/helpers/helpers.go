@@ -10,5 +10,6 @@ func GenerateShortURL(value string) string {
     h.Write([]byte(value))
     bs := h.Sum(nil)
     hash := base64.URLEncoding.EncodeToString(bs[:])
+
     return hash[:8]
 }

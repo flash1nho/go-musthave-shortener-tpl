@@ -13,39 +13,44 @@ type NetAddress struct {
     Port int
 }
 
-func (a NetAddress) String() string {
-    return a.Host + ":" + strconv.Itoa(a.Port)
+func (addr *NetAddress) String() string {
+    return addr.Host + ":" + strconv.Itoa(addr.Port)
 }
 
-func (a *NetAddress) Set(s string) error {
+func (addr *NetAddress) Set(s string) error {
     hp := strings.Split(s, ":")
+
     if len(hp) != 2 {
         return errors.New("значение может быть таким: localhost:8888")
     }
+
     port, err := strconv.Atoi(hp[1])
-    if err != nil{
+
+    if err != nil {
         return err
     }
-    a.Host = hp[0]
-    a.Port = port
+
+    addr.Host = hp[0]
+    addr.Port = port
+
     return nil
 }
 
-func Servers() (string, string) {
-    a := new(NetAddress)
-    _ = flag.Value(a)
-    flag.Var(a, "a", "значение может быть таким: localhost:8888")
+func Hosts() (string, string) {
+    host1 := new(NetAddress)
+    _ = flag.Value(host1)
+    flag.Var(host1, "a", "значение может быть таким: localhost:8888")
 
-    b := new(NetAddress)
-    _ = flag.Value(b)
-    flag.Var(b, "b", "значение может быть таким: localhost:8888")
+    host2 := new(NetAddress)
+    _ = flag.Value(host2)
+    flag.Var(host2, "b", "значение может быть таким: localhost:8888")
 
     flag.Parse()
 
-    return hostWithPort(fmt.Sprint(a)), hostWithPort(fmt.Sprint(b))
+    return hostWithPort(fmt.Sprint(host1)), hostWithPort(fmt.Sprint(host2))
 }
 
-func hostWithPort(host string) (string) {
+func hostWithPort(host string) string {
     if host == ":0" {
         return "localhost:8080"
     }
