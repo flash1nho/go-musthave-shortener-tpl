@@ -6,29 +6,29 @@ import (
     "strings"
     "testing"
 
+    "go-musthave-shortener-tpl/internal/config"
     "go-musthave-shortener-tpl/internal/storage"
     "go-musthave-shortener-tpl/internal/helpers"
 
     "github.com/stretchr/testify/assert"
 )
 
-func testData() (h *Handler, host string, originalURL string, shortURL string) {
+func testData() (h *Handler, originalURL string, shortURL string) {
     store := storage.NewStorage()
-    host = "localhost:8080"
-    h = NewHandler(store, host)
+    h = NewHandler(store, config.ServerData("http://localhost:8080"))
     originalURL = "https://practicum.yandex.ru"
     shortURL = helpers.GenerateShortURL(originalURL)
 
-    return h, host, originalURL, shortURL
+    return h, originalURL, shortURL
 }
 
 func TestPostURLHandler(t *testing.T) {
-    h, host, originalURL, shortURL := testData()
-    shortURL = "http://" + host + "/" + shortURL
+    h, originalURL, shortURL := testData()
+    shortURL = h.server.BaseURL + "/" + shortURL
 
     // описываем набор данных: метод запроса, ожидаемый код ответа, тело ответа, тело запроса
     testCases := []struct {
-        method       string
+        method string
         status int
         responseBody string
         requestBody string
@@ -55,12 +55,12 @@ func TestPostURLHandler(t *testing.T) {
 }
 
 func TestGetURLHandler(t *testing.T) {
-    h, _, originalURL, shortURL := testData()
+    h, originalURL, shortURL := testData()
     h.store.Set(shortURL, originalURL)
 
     // описываем набор данных: метод запроса, ожидаемый код ответа, тело ответа, path запроса
     testCases := []struct {
-        method       string
+        method string
         status int
         responseBody string
         path string

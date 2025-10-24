@@ -5,19 +5,20 @@ import (
     "net/http"
     "io"
 
+    "go-musthave-shortener-tpl/internal/config"
     "go-musthave-shortener-tpl/internal/helpers"
     "go-musthave-shortener-tpl/internal/storage"
 )
 
 type Handler struct {
     store *storage.Storage
-    url string
+    server config.Server
 }
 
-func NewHandler(store *storage.Storage, url string) *Handler {
+func NewHandler(store *storage.Storage, server config.Server) *Handler {
     return &Handler{
         store: store,
-        url: url,
+        server: server,
     }
 }
 
@@ -42,7 +43,7 @@ func (h *Handler) PostURLHandler(res http.ResponseWriter, req *http.Request) {
     h.store.Set(shortURL, originalURL)
 
     res.WriteHeader(http.StatusCreated)
-    fmt.Fprintf(res, "http://%s/%s", h.url, shortURL)
+    fmt.Fprintf(res, "%s/%s", h.server.BaseURL, shortURL)
 }
 
 func (h *Handler) GetURLHandler(res http.ResponseWriter, req *http.Request) {

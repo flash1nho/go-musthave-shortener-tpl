@@ -6,7 +6,13 @@ import (
     "errors"
     "strings"
     "strconv"
+    "os"
 )
+
+type Server struct {
+    Addr string
+    BaseURL string
+}
 
 type NetAddress struct {
     Host string
@@ -21,7 +27,7 @@ func (addr *NetAddress) Set(s string) error {
     hp := strings.Split(s, ":")
 
     if len(hp) != 2 {
-        return errors.New("значение может быть таким: localhost:8888")
+        return errors.New("значение может быть таким: localhost:8080")
     }
 
     port, err := strconv.Atoi(hp[1])
@@ -36,24 +42,32 @@ func (addr *NetAddress) Set(s string) error {
     return nil
 }
 
-func Hosts() (string, string) {
-    host1 := new(NetAddress)
-    _ = flag.Value(host1)
-    flag.Var(host1, "a", "значение может быть таким: localhost:8888")
+func Servers() (Server, Server) {
+    serverAddress1 := new(NetAddress)
+    _ = flag.Value(serverAddress1)
+    flag.Var(serverAddress1, "a", "значение может быть таким: localhost:8080")
 
-    host2 := new(NetAddress)
-    _ = flag.Value(host2)
-    flag.Var(host2, "b", "значение может быть таким: localhost:8888")
+    serverAddress2 := new(NetAddress)
+    _ = flag.Value(serverAddress2)
+    flag.Var(serverAddress2, "b", "значение может быть таким: localhost:8080")
 
     flag.Parse()
 
-    return hostWithPort(fmt.Sprint(host1)), hostWithPort(fmt.Sprint(host2))
+    return ServerData(fmt.Sprint(serverAddress1)), ServerData(fmt.Sprint(serverAddress2))
 }
 
-func hostWithPort(host string) string {
-    if host == ":0" {
-        return "localhost:8080"
+func ServerData(serverAddress string) Server {
+    if envServerAddress := os.Getenv("SERVER_ADDRESS"); envServerAddress != "" {
+        serverAddress = envServerAddress
+    } else if serverAddress == ":0" {
+        serverAddress = "localhost:8080"
     }
 
-    return host
+    serverBaseURL := "http://" + serverAddress
+
+    if envBaseURL := os.Getenv("BASE_URL"); envBaseURL != "" {
+        serverBaseURL = envBaseURL
+    }
+
+    return Server{Addr: serverAddress, BaseURL: serverBaseURL}
 }

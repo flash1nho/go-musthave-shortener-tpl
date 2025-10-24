@@ -11,6 +11,7 @@ import (
 		"time"
 		"slices"
 
+    "go-musthave-shortener-tpl/internal/config"
 		"go-musthave-shortener-tpl/internal/handler"
 
     "github.com/go-chi/chi/v5"
@@ -19,13 +20,13 @@ import (
 
 type Service struct {
     handler *handler.Handler
-    hosts []string
+    servers []config.Server
 }
 
-func NewService(handler *handler.Handler, hosts []string) *Service {
+func NewService(handler *handler.Handler, servers []config.Server) *Service {
     return &Service{
         handler: handler,
-        hosts: hosts,
+        servers: servers,
     }
 }
 
@@ -39,21 +40,21 @@ func (s *Service) mainRouter() http.Handler {
 		return r
 }
 
-func startServer(host string, hostNum int, handler http.Handler, wg *sync.WaitGroup) *http.Server {
+func startServer(addr string, BaseURL string, serverNum int, handler http.Handler, wg *sync.WaitGroup) *http.Server {
 		defer wg.Done()
 
 		srv := &http.Server{
-			Addr: host,
+			Addr: addr,
 			Handler: handler,
 			ReadTimeout:  5 * time.Second,
 			WriteTimeout: 10 * time.Second,
 			IdleTimeout:  120 * time.Second,
 		}
 
-		log.Printf("Сервер %d запущен на http://%s", hostNum, host)
+		log.Printf("Сервер %d запущен на %s", serverNum, BaseURL)
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Ошибка запуска сервера %d: %v", hostNum, err)
+			log.Fatalf("Ошибка запуска сервера %d: %v", serverNum, err)
 		}
 
 		return srv
@@ -73,16 +74,16 @@ func stopServer(s *http.Server, shutdownWg *sync.WaitGroup) {
 }
 
 func (s *Service) Run() {
-	  hosts := slices.Compact(s.hosts)
+	  configServers := slices.Compact(s.servers)
 		var servers []*http.Server
 	  var wg sync.WaitGroup
 
-		for hostNum, host := range hosts {
-			hostNum++
+		for serverNum, server := range configServers {
+			serverNum++
 			wg.Add(1)
 
 			go func() {
-				srv := startServer(host, hostNum, s.mainRouter(), &wg)
+				srv := startServer(server.Addr, server.BaseURL, serverNum, s.mainRouter(), &wg)
 				servers = append(servers, srv)
 			}()
 		}

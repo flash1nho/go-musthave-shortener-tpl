@@ -9,8 +9,8 @@ import (
 
 func main() {
     store := storage.NewStorage()
-    host1, host2 := config.Hosts()
-    h := handler.NewHandler(store, host2)
-    hosts := []string{host1, host2}
-    service.NewService(h, hosts).Run()
+    server1, server2 := config.Servers()
+    h := handler.NewHandler(store, server2)
+    servers := []config.Server{server1, server2}
+    service.NewService(h, servers).Run()
 }
