@@ -2,7 +2,6 @@ package service
 
 import (
 		"context"
-		"log"
 		"net/http"
 		"os"
 		"os/signal"
@@ -10,9 +9,11 @@ import (
 		"syscall"
 		"time"
 		"slices"
+		"fmt"
 
     "go-musthave-shortener-tpl/internal/config"
 		"go-musthave-shortener-tpl/internal/handler"
+		"go-musthave-shortener-tpl/internal/logger"
 
     "github.com/go-chi/chi/v5"
     "github.com/go-chi/chi/v5/middleware"
@@ -24,6 +25,8 @@ type Service struct {
 }
 
 func NewService(handler *handler.Handler, servers []config.Server) *Service {
+	  logger.Initialize("info")
+
     return &Service{
         handler: handler,
         servers: servers,
@@ -31,13 +34,12 @@ func NewService(handler *handler.Handler, servers []config.Server) *Service {
 }
 
 func (s *Service) mainRouter() http.Handler {
-		r := chi.NewRouter()
-	  r.Use(middleware.Logger)
-	  r.Use(middleware.Recoverer)
-	  r.Post("/", s.handler.PostURLHandler)
-	  r.Get("/{id}", s.handler.GetURLHandler)
+    r := chi.NewRouter()
+    r.Use(middleware.Logger)
+    r.Post("/", s.handler.PostURLHandler)
+    r.Get("/{id}", s.handler.GetURLHandler)
 
-		return r
+    return r
 }
 
 func startServer(addr string, BaseURL string, serverNum int, handler http.Handler, wg *sync.WaitGroup) *http.Server {
@@ -51,26 +53,26 @@ func startServer(addr string, BaseURL string, serverNum int, handler http.Handle
 			IdleTimeout:  120 * time.Second,
 		}
 
-		log.Printf("Сервер %d запущен на %s", serverNum, BaseURL)
+		logger.Log.Info(fmt.Sprintf("Сервер %d запущен на http://%s", serverNum, addr))
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Ошибка запуска сервера %d: %v", serverNum, err)
+        logger.Log.Fatal(fmt.Sprintf("Ошибка запуска сервера %s: %v", serverNum, err))
 		}
 
 		return srv
 }
 
-func stopServer(s *http.Server, shutdownWg *sync.WaitGroup) {
+func stopServer(srv *http.Server, shutdownWg *sync.WaitGroup) {
 		defer shutdownWg.Done()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
-		if err := s.Shutdown(ctx); err != nil {
-			log.Printf("Ошибка при плавном отключении сервера %s: %v", s.Addr, err)
+		if err := srv.Shutdown(ctx); err != nil {
+        logger.Log.Error(fmt.Sprintf("Ошибка при плавном отключении сервера %s: %v", srv.Addr, err))
 		}
 
-		log.Printf("Сервер %s успешно завершил работу.", s.Addr)
+		logger.Log.Info(fmt.Sprintf("Сервер %s успешно завершил работу.", srv.Addr))
 }
 
 func (s *Service) Run() {
@@ -92,7 +94,7 @@ func (s *Service) Run() {
 	  signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	  <-stop
 
-    log.Printf("Получен сигнал завершения. Начинаю плавное отключение...")
+    logger.Log.Info("Получен сигнал завершения. Начинаю плавное отключение...")
 
 		var shutdownWg sync.WaitGroup
 
@@ -106,5 +108,5 @@ func (s *Service) Run() {
 
 		shutdownWg.Wait()
 
-		log.Printf("Все серверы успешно завершили работу.")
+		logger.Log.Info("Все серверы успешно завершили работу.")
 }
