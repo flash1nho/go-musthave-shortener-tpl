@@ -11,9 +11,9 @@ import (
 		"slices"
 		"fmt"
 
-    "go-musthave-shortener-tpl/internal/config"
-		"go-musthave-shortener-tpl/internal/handler"
-		"go-musthave-shortener-tpl/internal/logger"
+    "github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
+		"github.com/flash1nho/go-musthave-shortener-tpl/internal/handler"
+		"github.com/flash1nho/go-musthave-shortener-tpl/internal/logger"
 
     "github.com/go-chi/chi/v5"
     "github.com/go-chi/chi/v5/middleware"
@@ -37,6 +37,7 @@ func (s *Service) mainRouter() http.Handler {
     r := chi.NewRouter()
     r.Use(middleware.Logger)
     r.Post("/", s.handler.PostURLHandler)
+    r.Post("/api/shorten", s.handler.ApiShortenPostURLHandler)
     r.Get("/{id}", s.handler.GetURLHandler)
 
     return r

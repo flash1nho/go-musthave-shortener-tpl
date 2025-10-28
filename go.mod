@@ -1,4 +1,4 @@
-module go-musthave-shortener-tpl
+module github.com/flash1nho/go-musthave-shortener-tpl
 
 go 1.24.8
 

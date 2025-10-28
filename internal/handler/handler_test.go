@@ -4,11 +4,12 @@ import (
     "net/http"
     "net/http/httptest"
     "strings"
+    "encoding/json"
     "testing"
 
-    "go-musthave-shortener-tpl/internal/config"
-    "go-musthave-shortener-tpl/internal/storage"
-    "go-musthave-shortener-tpl/internal/helpers"
+    "github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
+    "github.com/flash1nho/go-musthave-shortener-tpl/internal/storage"
+    "github.com/flash1nho/go-musthave-shortener-tpl/internal/helpers"
 
     "github.com/stretchr/testify/assert"
 )
@@ -77,6 +78,51 @@ func TestGetURLHandler(t *testing.T) {
 
             // вызовем хендлер как обычную функцию, без запуска самого сервера
             h.GetURLHandler(w, r)
+
+            assert.Equal(t, tc.status, w.Code, "Код ответа не совпадает с ожидаемым")
+            // проверим корректность полученного тела ответа, если мы его ожидаем
+            if tc.responseBody != "" {
+                assert.Equal(t, tc.responseBody, strings.TrimSuffix(w.Body.String(), "\n"), "Тело ответа не совпадает с ожидаемым")
+            }
+        })
+    }
+}
+
+func TestApiShortenPostURLHandler(t *testing.T) {
+    h, originalURL, shortURL := testData()
+    shortURL = h.server.BaseURL + "/" + shortURL
+
+    requestData := ShortenRequest{
+        URL: originalURL,
+    }
+    requestJsonBytes, _ := json.Marshal(requestData)
+    requestBody := string(requestJsonBytes)
+
+    responseData := ShortenResponse{
+        Result: shortURL,
+    }
+    responseJsonBytes, _ := json.Marshal(responseData)
+    responseBody := string(responseJsonBytes)
+
+    // описываем набор данных: метод запроса, ожидаемый код ответа, тело ответа, тело запроса
+    testCases := []struct {
+        method string
+        status int
+        responseBody string
+        requestBody string
+    }{
+        {method: http.MethodPost, status: http.StatusBadRequest, responseBody: "Invalid request body", requestBody: ""},
+        {method: http.MethodPost, status: http.StatusBadRequest, responseBody: "body is missing", requestBody: `{"result":""}`},
+        {method: http.MethodPost, status: http.StatusCreated, responseBody: responseBody, requestBody: requestBody},
+    }
+
+    for _, tc := range testCases {
+        t.Run(tc.method, func(t *testing.T) {
+            r := httptest.NewRequest(tc.method, "/", strings.NewReader(tc.requestBody))
+            w := httptest.NewRecorder()
+
+            // вызовем хендлер как обычную функцию, без запуска самого сервера
+            h.ApiShortenPostURLHandler(w, r)
 
             assert.Equal(t, tc.status, w.Code, "Код ответа не совпадает с ожидаемым")
             // проверим корректность полученного тела ответа, если мы его ожидаем
