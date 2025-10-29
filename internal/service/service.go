@@ -10,6 +10,7 @@ import (
 		"time"
 		"slices"
 		"fmt"
+		"compress/gzip"
 
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
 		"github.com/flash1nho/go-musthave-shortener-tpl/internal/handler"
@@ -33,9 +34,29 @@ func NewService(handler *handler.Handler, servers []config.Server) *Service {
     }
 }
 
+func Decompressor(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        if r.Header.Get("Content-Encoding") == "gzip" {
+            gzReader, err := gzip.NewReader(r.Body)
+            if err != nil {
+                http.Error(w, "Ошибка при распаковке gzip", http.StatusBadRequest)
+                return
+            }
+
+            defer gzReader.Close()
+
+            r.Body = gzReader
+        }
+        next.ServeHTTP(w, r)
+    })
+}
+
 func (s *Service) mainRouter() http.Handler {
     r := chi.NewRouter()
+
     r.Use(middleware.Logger)
+    r.Use(Decompressor)
+
     r.Post("/", s.handler.PostURLHandler)
     r.Post("/api/shorten", s.handler.ApiShortenPostURLHandler)
     r.Get("/{id}", s.handler.GetURLHandler)
