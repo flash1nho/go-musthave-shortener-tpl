@@ -8,9 +8,10 @@ import (
 )
 
 func main() {
-    store := storage.NewStorage()
-    server1, server2 := config.Servers()
+	  server1, server2, filePath := config.Settings()
+    store, _ := storage.NewFileStorage(filePath)
     h := handler.NewHandler(store, server2)
     servers := []config.Server{server1, server2}
+
     service.NewService(h, servers).Run()
 }

@@ -15,8 +15,8 @@ import (
 )
 
 func testData() (h *Handler, originalURL string, shortURL string) {
-    store := storage.NewStorage()
-    h = NewHandler(store, config.ServerData("http://localhost:8080"))
+    store, _ := storage.NewFileStorage(config.DefaultFilePath)
+    h = NewHandler(store, config.ServerData(config.DefaultURL))
     originalURL = "https://practicum.yandex.ru"
     shortURL = helpers.GenerateShortURL(originalURL)
 
@@ -88,21 +88,21 @@ func TestGetURLHandler(t *testing.T) {
     }
 }
 
-func TestApiShortenPostURLHandler(t *testing.T) {
+func TestAPIShortenPostURLHandler(t *testing.T) {
     h, originalURL, shortURL := testData()
     shortURL = h.server.BaseURL + "/" + shortURL
 
     requestData := ShortenRequest{
         URL: originalURL,
     }
-    requestJsonBytes, _ := json.Marshal(requestData)
-    requestBody := string(requestJsonBytes)
+    requestJSONBytes, _ := json.Marshal(requestData)
+    requestBody := string(requestJSONBytes)
 
     responseData := ShortenResponse{
         Result: shortURL,
     }
-    responseJsonBytes, _ := json.Marshal(responseData)
-    responseBody := string(responseJsonBytes)
+    responseJSONBytes, _ := json.Marshal(responseData)
+    responseBody := string(responseJSONBytes)
 
     // описываем набор данных: метод запроса, ожидаемый код ответа, тело ответа, тело запроса
     testCases := []struct {
@@ -122,7 +122,7 @@ func TestApiShortenPostURLHandler(t *testing.T) {
             w := httptest.NewRecorder()
 
             // вызовем хендлер как обычную функцию, без запуска самого сервера
-            h.ApiShortenPostURLHandler(w, r)
+            h.APIShortenPostURLHandler(w, r)
 
             assert.Equal(t, tc.status, w.Code, "Код ответа не совпадает с ожидаемым")
             // проверим корректность полученного тела ответа, если мы его ожидаем

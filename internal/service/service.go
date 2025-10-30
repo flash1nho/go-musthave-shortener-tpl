@@ -58,7 +58,7 @@ func (s *Service) mainRouter() http.Handler {
     r.Use(Decompressor)
 
     r.Post("/", s.handler.PostURLHandler)
-    r.Post("/api/shorten", s.handler.ApiShortenPostURLHandler)
+    r.Post("/api/shorten", s.handler.APIShortenPostURLHandler)
     r.Get("/{id}", s.handler.GetURLHandler)
 
     return r
@@ -78,7 +78,7 @@ func startServer(addr string, BaseURL string, serverNum int, handler http.Handle
 		logger.Log.Info(fmt.Sprintf("Сервер %d запущен на http://%s", serverNum, addr))
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-        logger.Log.Fatal(fmt.Sprintf("Ошибка запуска сервера %s: %v", serverNum, err))
+        logger.Log.Fatal(fmt.Sprintf("Ошибка запуска сервера %d: %v", serverNum, err))
 		}
 
 		return srv

@@ -20,11 +20,11 @@ type ShortenResponse struct {
 }
 
 type Handler struct {
-    store *storage.Storage
+    store *storage.FileStorage
     server config.Server
 }
 
-func NewHandler(store *storage.Storage, server config.Server) *Handler {
+func NewHandler(store *storage.FileStorage, server config.Server) *Handler {
     return &Handler{
         store: store,
         server: server,
@@ -73,7 +73,7 @@ func (h *Handler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
     http.Redirect(w, r, originalURL, http.StatusTemporaryRedirect)
 }
 
-func (h *Handler) ApiShortenPostURLHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Request) {
     var req ShortenRequest
 
     err := json.NewDecoder(r.Body).Decode(&req)

@@ -9,6 +9,12 @@ import (
     "os"
 )
 
+const (
+    DefaultHost = "localhost:8080"
+    DefaultURL = "http://localhost:8080"
+    DefaultFilePath = "/tmp/shorten.json"
+)
+
 type Server struct {
     Addr string
     BaseURL string
@@ -24,10 +30,11 @@ func (addr *NetAddress) String() string {
 }
 
 func (addr *NetAddress) Set(s string) error {
-    hp := strings.Split(s, ":")
+    trimmed := strings.TrimPrefix(s, "http://")
+    hp := strings.Split(trimmed, ":")
 
     if len(hp) != 2 {
-        return errors.New("значение может быть таким: localhost:8080")
+        return errors.New("значение может быть таким: " + DefaultHost + "|" + DefaultURL)
     }
 
     port, err := strconv.Atoi(hp[1])
@@ -42,25 +49,32 @@ func (addr *NetAddress) Set(s string) error {
     return nil
 }
 
-func Servers() (Server, Server) {
+func Settings() (Server, Server, string) {
     serverAddress1 := new(NetAddress)
     _ = flag.Value(serverAddress1)
-    flag.Var(serverAddress1, "a", "значение может быть таким: localhost:8080")
+    flag.Var(serverAddress1, "a", "значение может быть таким: " + DefaultHost + "|" + DefaultURL)
 
     serverAddress2 := new(NetAddress)
     _ = flag.Value(serverAddress2)
-    flag.Var(serverAddress2, "b", "значение может быть таким: localhost:8080")
+    flag.Var(serverAddress2, "b", "значение может быть таким: " + DefaultHost + "|" + DefaultURL)
+
+    var filePath string
+    flag.StringVar(&filePath, "f", DefaultFilePath, "путь к файлу для хранения данных")
 
     flag.Parse()
 
-    return ServerData(fmt.Sprint(serverAddress1)), ServerData(fmt.Sprint(serverAddress2))
+    if envPath := os.Getenv("FILE_STORAGE_PATH"); envPath != "" {
+        filePath = envPath
+    }
+
+    return ServerData(fmt.Sprint(serverAddress1)), ServerData(fmt.Sprint(serverAddress2)), filePath
 }
 
 func ServerData(serverAddress string) Server {
     if envServerAddress := os.Getenv("SERVER_ADDRESS"); envServerAddress != "" {
         serverAddress = envServerAddress
     } else if serverAddress == ":0" {
-        serverAddress = "localhost:8080"
+        serverAddress = DefaultHost
     }
 
     serverBaseURL := "http://" + serverAddress
