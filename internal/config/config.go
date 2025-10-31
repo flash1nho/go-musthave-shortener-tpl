@@ -7,6 +7,10 @@ import (
     "strings"
     "strconv"
     "os"
+
+    "github.com/flash1nho/go-musthave-shortener-tpl/internal/logger"
+
+    "go.uber.org/zap"
 )
 
 const (
@@ -49,7 +53,7 @@ func (addr *NetAddress) Set(s string) error {
     return nil
 }
 
-func Settings() (Server, Server, string) {
+func Settings() (Server, Server, string, *zap.Logger) {
     serverAddress1 := new(NetAddress)
     _ = flag.Value(serverAddress1)
     flag.Var(serverAddress1, "a", "значение может быть таким: " + DefaultHost + "|" + DefaultURL)
@@ -67,7 +71,9 @@ func Settings() (Server, Server, string) {
         filePath = envPath
     }
 
-    return ServerData(fmt.Sprint(serverAddress1)), ServerData(fmt.Sprint(serverAddress2)), filePath
+    logger.Initialize("info")
+
+    return ServerData(fmt.Sprint(serverAddress1)), ServerData(fmt.Sprint(serverAddress2)), filePath, logger.Log
 }
 
 func ServerData(serverAddress string) Server {

@@ -4,6 +4,7 @@ import (
 		"sync"
 		"encoding/json"
 		"os"
+		"bufio"
 )
 
 type URLMapping struct {
@@ -37,20 +38,30 @@ func (fs *FileStorage) load() error {
 		fs.mu.Lock()
 		defer fs.mu.Unlock()
 
-		data, err := os.ReadFile(fs.filePath)
+		file, err := os.Open(fs.filePath)
 
 		if err != nil {
 			return err
 		}
 
-		var mappings []URLMapping
+		defer file.Close()
 
-		if err := json.Unmarshal(data, &mappings); err != nil {
-			return err
+		scanner := bufio.NewScanner(file)
+
+		for scanner.Scan() {
+			line := scanner.Bytes()
+
+			var m URLMapping
+
+			if err := json.Unmarshal(line, &m); err != nil {
+				continue
+			}
+
+			fs.urlMappings[m.ShortURL] = m.OriginalURL
 		}
 
-		for _, m := range mappings {
-			fs.urlMappings[m.ShortURL] = m.OriginalURL
+		if err := scanner.Err(); err != nil {
+			return err
 		}
 
 		return nil
@@ -60,25 +71,29 @@ func (fs *FileStorage) save() error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	var mappings []URLMapping
-
-	for short, original := range fs.urlMappings {
-		uuid := len(mappings) + 1
-
-		mappings = append(mappings, URLMapping{
-			UUID:        uuid,
-			ShortURL:    short,
-			OriginalURL: original,
-		})
-	}
-
-	data, err := json.MarshalIndent(mappings, "", "  ")
+	file, err := os.OpenFile(fs.filePath, os.O_CREATE|os.O_WRONLY, 0644)
 
 	if err != nil {
 		return err
 	}
 
-	return os.WriteFile(fs.filePath, data, 0644)
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+
+  uuid := 1
+
+  for short, original := range fs.urlMappings {
+		m := URLMapping{UUID: uuid, ShortURL: short, OriginalURL: original}
+
+		if err := encoder.Encode(m); err != nil {
+			return err
+		}
+
+		uuid++
+	}
+
+	return nil
 }
 
 func (fs *FileStorage) Set(key, value string) error {
