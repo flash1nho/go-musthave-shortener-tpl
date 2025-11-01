@@ -6,7 +6,23 @@ import (
     "errors"
     "strings"
     "strconv"
+    "os"
+
+    "github.com/flash1nho/go-musthave-shortener-tpl/internal/logger"
+
+    "go.uber.org/zap"
 )
+
+const (
+    DefaultHost = "localhost:8080"
+    DefaultURL = "http://localhost:8080"
+    DefaultFilePath = "/tmp/shorten.json"
+)
+
+type Server struct {
+    Addr string
+    BaseURL string
+}
 
 type NetAddress struct {
     Host string
@@ -18,10 +34,11 @@ func (addr *NetAddress) String() string {
 }
 
 func (addr *NetAddress) Set(s string) error {
-    hp := strings.Split(s, ":")
+    trimmed := strings.TrimPrefix(s, "http://")
+    hp := strings.Split(trimmed, ":")
 
     if len(hp) != 2 {
-        return errors.New("значение может быть таким: localhost:8888")
+        return errors.New("значение может быть таким: " + DefaultHost + "|" + DefaultURL)
     }
 
     port, err := strconv.Atoi(hp[1])
@@ -36,24 +53,41 @@ func (addr *NetAddress) Set(s string) error {
     return nil
 }
 
-func Hosts() (string, string) {
-    host1 := new(NetAddress)
-    _ = flag.Value(host1)
-    flag.Var(host1, "a", "значение может быть таким: localhost:8888")
+func Settings() (Server, Server, string, *zap.Logger) {
+    serverAddress1 := new(NetAddress)
+    _ = flag.Value(serverAddress1)
+    flag.Var(serverAddress1, "a", "значение может быть таким: " + DefaultHost + "|" + DefaultURL)
 
-    host2 := new(NetAddress)
-    _ = flag.Value(host2)
-    flag.Var(host2, "b", "значение может быть таким: localhost:8888")
+    serverAddress2 := new(NetAddress)
+    _ = flag.Value(serverAddress2)
+    flag.Var(serverAddress2, "b", "значение может быть таким: " + DefaultHost + "|" + DefaultURL)
+
+    var filePath string
+    flag.StringVar(&filePath, "f", DefaultFilePath, "путь к файлу для хранения данных")
 
     flag.Parse()
 
-    return hostWithPort(fmt.Sprint(host1)), hostWithPort(fmt.Sprint(host2))
-}
-
-func hostWithPort(host string) string {
-    if host == ":0" {
-        return "localhost:8080"
+    if envPath := os.Getenv("FILE_STORAGE_PATH"); envPath != "" {
+        filePath = envPath
     }
 
-    return host
+    logger.Initialize("info")
+
+    return ServerData(fmt.Sprint(serverAddress1)), ServerData(fmt.Sprint(serverAddress2)), filePath, logger.Log
+}
+
+func ServerData(serverAddress string) Server {
+    if envServerAddress := os.Getenv("SERVER_ADDRESS"); envServerAddress != "" {
+        serverAddress = envServerAddress
+    } else if serverAddress == ":0" {
+        serverAddress = DefaultHost
+    }
+
+    serverBaseURL := "http://" + serverAddress
+
+    if envBaseURL := os.Getenv("BASE_URL"); envBaseURL != "" {
+        serverBaseURL = envBaseURL
+    }
+
+    return Server{Addr: serverAddress, BaseURL: serverBaseURL}
 }

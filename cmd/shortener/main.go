@@ -1,16 +1,24 @@
 package main
 
 import (
-    "go-musthave-shortener-tpl/internal/storage"
-    "go-musthave-shortener-tpl/internal/config"
-    "go-musthave-shortener-tpl/internal/handler"
-    "go-musthave-shortener-tpl/internal/service"
+	  "fmt"
+
+    "github.com/flash1nho/go-musthave-shortener-tpl/internal/storage"
+    "github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
+    "github.com/flash1nho/go-musthave-shortener-tpl/internal/handler"
+    "github.com/flash1nho/go-musthave-shortener-tpl/internal/service"
 )
 
 func main() {
-    store := storage.NewStorage()
-    host1, host2 := config.Hosts()
-    h := handler.NewHandler(store, host2)
-    hosts := []string{host1, host2}
-    service.NewService(h, hosts).Run()
+	  server1, server2, filePath, log := config.Settings()
+    store, err := storage.NewFileStorage(filePath)
+
+    if err != nil {
+        log.Fatal(fmt.Sprint(err))
+    }
+
+    h := handler.NewHandler(store, server2)
+    servers := []config.Server{server1, server2}
+
+    service.NewService(h, servers, log).Run()
 }
