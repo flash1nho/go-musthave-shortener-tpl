@@ -10,14 +10,14 @@ import (
 )
 
 func main() {
-	  server1, server2, filePath, log := config.Settings()
+	  server1, server2, log, filePath, databaseDSN := config.Settings()
     store, err := storage.NewFileStorage(filePath)
 
     if err != nil {
         log.Fatal(fmt.Sprint(err))
     }
 
-    h := handler.NewHandler(store, server2)
+    h := handler.NewHandler(store, server2, databaseDSN)
     servers := []config.Server{server1, server2}
 
     service.NewService(h, servers, log).Run()
