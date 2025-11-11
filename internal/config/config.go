@@ -16,8 +16,8 @@ import (
 const (
     DefaultHost = "localhost:8080"
     DefaultURL = "http://localhost:8080"
-    DefaultFilePath = "/tmp/shorten.json"
-    DefaultDatabaseDSN = "postgres://username:password@localhost:5432/database_name"
+    DefaultFilePath = ""
+    DefaultDatabaseDSN = ""
 )
 
 type Server struct {
@@ -63,20 +63,20 @@ func Settings() (Server, Server, *zap.Logger, string, string) {
     _ = flag.Value(serverAddress2)
     flag.Var(serverAddress2, "b", "значение может быть таким: " + DefaultHost + "|" + DefaultURL)
 
-    var filePath string
-    flag.StringVar(&filePath, "f", DefaultFilePath, "путь к файлу для хранения данных")
-
     var databaseDSN string
     flag.StringVar(&databaseDSN, "d", DefaultDatabaseDSN, "реквизиты базы данных")
 
-    flag.Parse()
+    var filePath string
+    flag.StringVar(&filePath, "f", DefaultFilePath, "путь к файлу для хранения данных")
 
-    if envPath := os.Getenv("FILE_STORAGE_PATH"); envPath != "" {
-        filePath = envPath
-    }
+    flag.Parse()
 
     if envDatabaseDSN := os.Getenv("DATABASE_DSN"); envDatabaseDSN != "" {
         databaseDSN = envDatabaseDSN
+    }
+
+    if envPath := os.Getenv("FILE_STORAGE_PATH"); envPath != "" {
+        filePath = envPath
     }
 
     logger.Initialize("info")
@@ -84,8 +84,8 @@ func Settings() (Server, Server, *zap.Logger, string, string) {
     return ServerData(fmt.Sprint(serverAddress1)),
            ServerData(fmt.Sprint(serverAddress2)),
            logger.Log,
-           filePath,
-           databaseDSN
+           databaseDSN,
+           filePath
 }
 
 func ServerData(serverAddress string) Server {

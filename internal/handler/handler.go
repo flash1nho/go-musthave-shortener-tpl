@@ -5,6 +5,7 @@ import (
     "net/http"
     "io"
     "encoding/json"
+    "context"
 
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/helpers"
@@ -21,16 +22,14 @@ type ShortenResponse struct {
 }
 
 type Handler struct {
-    store *storage.FileStorage
+    store *storage.Storage
     server config.Server
-    databaseDSN string
 }
 
-func NewHandler(store *storage.FileStorage, server config.Server, databaseDSN string) *Handler {
+func NewHandler(store *storage.Storage, server config.Server) *Handler {
     return &Handler{
         store: store,
         server: server,
-        databaseDSN: databaseDSN,
     }
 }
 
@@ -105,10 +104,10 @@ func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
-    _, err := db.Connect(h.databaseDSN)
+    conn, err := db.Connect(h.store.DatabaseDSN)
+    defer conn.Close(context.Background())
 
     if err != nil {
-        fmt.Println(err)
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
     }

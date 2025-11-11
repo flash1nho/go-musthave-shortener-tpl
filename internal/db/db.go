@@ -8,10 +8,10 @@ import (
 
 func Connect(databaseDSN string) (*pgx.Conn, error) {
 		conn, err := pgx.Connect(context.Background(), databaseDSN)
+
 		if err != nil {
 			return nil, err
 		}
-		defer conn.Close(context.Background())
 
 		return conn, nil
 }
