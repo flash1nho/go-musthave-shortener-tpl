@@ -11,6 +11,10 @@ import (
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/logger"
 
     "go.uber.org/zap"
+
+    "github.com/golang-migrate/migrate/v4"
+    _ "github.com/golang-migrate/migrate/v4/database/postgres"
+    _ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 const (
@@ -81,6 +85,8 @@ func Settings() (Server, Server, *zap.Logger, string, string) {
 
     logger.Initialize("info")
 
+    runMigrations(databaseDSN, logger.Log)
+
     return ServerData(fmt.Sprint(serverAddress1)),
            ServerData(fmt.Sprint(serverAddress2)),
            logger.Log,
@@ -102,4 +108,18 @@ func ServerData(serverAddress string) Server {
     }
 
     return Server{Addr: serverAddress, BaseURL: serverBaseURL}
+}
+
+func runMigrations(databaseDSN string, log *zap.Logger) {
+    if databaseDSN != "" {
+        m, err := migrate.New("file://migrations", databaseDSN)
+
+        if err != nil {
+            log.Fatal(fmt.Sprintf("Ошибка загрузки миграций: %v", err))
+        }
+
+        if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+            log.Fatal(fmt.Sprintf("Ошибка запуска миграций: %v", err))
+        }
+    }
 }

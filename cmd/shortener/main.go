@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	server1, server2, log, databaseDSN, filePath := config.Settings()
+    server1, server2, log, databaseDSN, filePath := config.Settings()
     store, err := storage.NewStorage(databaseDSN, filePath)
 
     if err != nil {

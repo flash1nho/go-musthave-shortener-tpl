@@ -6,11 +6,15 @@ import (
     "io"
     "encoding/json"
     "context"
+    "errors"
 
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/helpers"
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/storage"
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/db"
+
+    "github.com/jackc/pgx/v5/pgconn"
+    "github.com/jackc/pgerrcode"
 )
 
 type ShortenRequest struct {
@@ -61,9 +65,9 @@ func (h *Handler) PostURLHandler(w http.ResponseWriter, r *http.Request) {
     }
 
     shortURL := helpers.GenerateShortURL(originalURL)
-    h.store.Set(shortURL, originalURL)
+    err = h.store.Set(shortURL, originalURL)
+    handleStatusConflict(w, err)
 
-    w.WriteHeader(http.StatusCreated)
     fmt.Fprintf(w, "%s/%s", h.server.BaseURL, shortURL)
 }
 
@@ -86,6 +90,8 @@ func (h *Handler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+
     var req ShortenRequest
 
     err := json.NewDecoder(r.Body).Decode(&req)
@@ -101,31 +107,32 @@ func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Reques
     }
 
     shortURL := helpers.GenerateShortURL(req.URL)
-    h.store.Set(shortURL, req.URL)
+    err = h.store.Set(shortURL, req.URL)
+    handleStatusConflict(w, err)
 
     response := ShortenResponse{
         Result: h.server.BaseURL + "/" + shortURL,
     }
-
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(http.StatusCreated)
 
     json.NewEncoder(w).Encode(response)
 }
 
 func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
     conn, err := db.Connect(h.store.DatabaseDSN)
-    defer conn.Close(context.Background())
 
     if err != nil {
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
     }
 
+    defer conn.Close(context.Background())
+
     w.WriteHeader(http.StatusOK)
 }
 
 func (h *Handler) APIShortenBatchPostURLHandler(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+
     var req []BatchShortenRequest
 
     err := json.NewDecoder(r.Body).Decode(&req)
@@ -154,8 +161,22 @@ func (h *Handler) APIShortenBatchPostURLHandler(w http.ResponseWriter, r *http.R
         response = append(response, resp)
     }
 
-    w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(http.StatusCreated)
 
     json.NewEncoder(w).Encode(response)
+}
+
+func handleStatusConflict(w http.ResponseWriter, err error) {
+    if err != nil {
+        var pgErr *pgconn.PgError
+
+        if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+            w.WriteHeader(http.StatusConflict)
+        } else {
+            http.Error(w, "Invalid request body", http.StatusBadRequest)
+            return
+        }
+    } else {
+        w.WriteHeader(http.StatusCreated)
+    }
 }

@@ -34,13 +34,13 @@ func NewStorage(databaseDSN string, filePath string) (*Storage, error) {
 				err := s.dbLoad()
 
 				if err != nil && !os.IsNotExist(err) {
-					return nil, err
+						return nil, err
 				}
 		} else if s.filePath != "" {
 				err := s.fileLoad()
 
 				if err != nil {
-					return nil, err
+						return nil, err
 				}
 		}
 
@@ -51,10 +51,10 @@ func (s *Storage) fileLoad() error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
-		file, err := os.Open(s.filePath)
+		file, err := os.OpenFile(s.filePath, os.O_CREATE|os.O_RDONLY, 0644)
 
 		if err != nil {
-			return err
+				return err
 		}
 
 		defer file.Close()
@@ -67,14 +67,14 @@ func (s *Storage) fileLoad() error {
 			var m URLMapping
 
 			if err := json.Unmarshal(line, &m); err != nil {
-				continue
+					continue
 			}
 
 			s.urlMappings[m.ShortURL] = m.OriginalURL
 		}
 
 		if err := scanner.Err(); err != nil {
-			return err
+				return err
 		}
 
 		return nil
@@ -85,11 +85,12 @@ func (s *Storage) dbLoad() error {
 		defer s.mu.Unlock()
 
     conn, err := db.Connect(s.DatabaseDSN)
-    defer conn.Close(context.Background())
 
 		if err != nil {
-			return err
+				return err
 		}
+
+		defer conn.Close(context.Background())
 
 		rows, err := conn.Query(context.Background(), "SELECT original_url, short_url FROM shorten_urls;")
 
@@ -116,29 +117,29 @@ func (s *Storage) dbLoad() error {
 }
 
 func (s *Storage) save(key string, value string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 
-	var err error = nil
+		var err error = nil
 
-  if s.DatabaseDSN != "" {
-			err = s.dbSave(value, key)
-	} else if s.filePath != "" {
-			err = s.fileSave()
-	}
+	  if s.DatabaseDSN != "" {
+				err = s.dbSave(value, key)
+		} else if s.filePath != "" {
+				err = s.fileSave()
+		}
 
-	if err != nil {
-		return err
-	}
+		if err != nil {
+				return err
+		}
 
-	return nil
+		return nil
 }
 
 func (s *Storage) fileSave() error {
 		file, err := os.OpenFile(s.filePath, os.O_CREATE|os.O_WRONLY, 0644)
 
 		if err != nil {
-			return err
+				return err
 		}
 
 		defer file.Close()
@@ -151,7 +152,7 @@ func (s *Storage) fileSave() error {
 			m := URLMapping{UUID: uuid, ShortURL: short, OriginalURL: original}
 
 			if err := encoder.Encode(m); err != nil {
-				return err
+					return err
 			}
 
 			uuid++
@@ -162,18 +163,18 @@ func (s *Storage) fileSave() error {
 
 func (s *Storage) dbSave(originalURL string, shortURL string) error {
     conn, err := db.Connect(s.DatabaseDSN)
-    defer conn.Close(context.Background())
 
 		if err != nil {
-			return err
+				return err
 		}
 
-    _, err = conn.Exec(context.Background(), `
-      INSERT INTO shorten_urls (original_url, short_url) VALUES ($1, $2);
-    `, originalURL, shortURL)
+		defer conn.Close(context.Background())
+
+    insertSQL := `INSERT INTO shorten_urls (original_url, short_url) VALUES ($1, $2)`
+    _, err = conn.Exec(context.Background(), insertSQL, originalURL, shortURL)
 
 		if err != nil {
-			return err
+				return err
 		}
 
 		return nil
