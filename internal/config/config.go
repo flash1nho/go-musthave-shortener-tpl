@@ -11,12 +11,17 @@ import (
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/logger"
 
     "go.uber.org/zap"
+
+    "github.com/golang-migrate/migrate/v4"
+    _ "github.com/golang-migrate/migrate/v4/database/postgres"
+    _ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 const (
     DefaultHost = "localhost:8080"
     DefaultURL = "http://localhost:8080"
-    DefaultFilePath = "/tmp/shorten.json"
+    DefaultFilePath = ""
+    DefaultDatabaseDSN = ""
 )
 
 type Server struct {
@@ -53,7 +58,7 @@ func (addr *NetAddress) Set(s string) error {
     return nil
 }
 
-func Settings() (Server, Server, string, *zap.Logger) {
+func Settings() (Server, Server, *zap.Logger, string, string) {
     serverAddress1 := new(NetAddress)
     _ = flag.Value(serverAddress1)
     flag.Var(serverAddress1, "a", "значение может быть таким: " + DefaultHost + "|" + DefaultURL)
@@ -62,10 +67,17 @@ func Settings() (Server, Server, string, *zap.Logger) {
     _ = flag.Value(serverAddress2)
     flag.Var(serverAddress2, "b", "значение может быть таким: " + DefaultHost + "|" + DefaultURL)
 
+    var databaseDSN string
+    flag.StringVar(&databaseDSN, "d", DefaultDatabaseDSN, "реквизиты базы данных")
+
     var filePath string
     flag.StringVar(&filePath, "f", DefaultFilePath, "путь к файлу для хранения данных")
 
     flag.Parse()
+
+    if envDatabaseDSN := os.Getenv("DATABASE_DSN"); envDatabaseDSN != "" {
+        databaseDSN = envDatabaseDSN
+    }
 
     if envPath := os.Getenv("FILE_STORAGE_PATH"); envPath != "" {
         filePath = envPath
@@ -73,7 +85,13 @@ func Settings() (Server, Server, string, *zap.Logger) {
 
     logger.Initialize("info")
 
-    return ServerData(fmt.Sprint(serverAddress1)), ServerData(fmt.Sprint(serverAddress2)), filePath, logger.Log
+    runMigrations(databaseDSN, logger.Log)
+
+    return ServerData(fmt.Sprint(serverAddress1)),
+           ServerData(fmt.Sprint(serverAddress2)),
+           logger.Log,
+           databaseDSN,
+           filePath
 }
 
 func ServerData(serverAddress string) Server {
@@ -90,4 +108,18 @@ func ServerData(serverAddress string) Server {
     }
 
     return Server{Addr: serverAddress, BaseURL: serverBaseURL}
+}
+
+func runMigrations(databaseDSN string, log *zap.Logger) {
+    if databaseDSN != "" {
+        m, err := migrate.New("file://migrations", databaseDSN)
+
+        if err != nil {
+            log.Fatal(fmt.Sprintf("Ошибка загрузки миграций: %v", err))
+        }
+
+        if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+            log.Fatal(fmt.Sprintf("Ошибка запуска миграций: %v", err))
+        }
+    }
 }

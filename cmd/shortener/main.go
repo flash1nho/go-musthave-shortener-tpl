@@ -10,8 +10,8 @@ import (
 )
 
 func main() {
-	  server1, server2, filePath, log := config.Settings()
-    store, err := storage.NewFileStorage(filePath)
+    server1, server2, log, databaseDSN, filePath := config.Settings()
+    store, err := storage.NewStorage(databaseDSN, filePath)
 
     if err != nil {
         log.Fatal(fmt.Sprint(err))
