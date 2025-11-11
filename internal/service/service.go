@@ -62,6 +62,7 @@ func (s *Service) mainRouter() http.Handler {
     r.Post("/api/shorten", s.handler.APIShortenPostURLHandler)
     r.Get("/{id}", s.handler.GetURLHandler)
     r.Get("/ping", s.handler.Ping)
+    r.Post("/api/shorten/batch", s.handler.APIShortenBatchPostURLHandler)
 
     return r
 }

@@ -21,6 +21,16 @@ type ShortenResponse struct {
     Result string `json:"result"`
 }
 
+type BatchShortenRequest struct {
+    CorrelationID string `json:"correlation_id"`
+    OriginalURL   string `json:"original_url"`
+}
+
+type BatchShortenResponse struct {
+    CorrelationID string `json:"correlation_id"`
+    ShortURL      string `json:"short_url"`
+}
+
 type Handler struct {
     store *storage.Storage
     server config.Server
@@ -113,4 +123,39 @@ func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
     }
 
     w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) APIShortenBatchPostURLHandler(w http.ResponseWriter, r *http.Request) {
+    var req []BatchShortenRequest
+
+    err := json.NewDecoder(r.Body).Decode(&req)
+
+    if err != nil {
+        http.Error(w, "Invalid request body", http.StatusBadRequest)
+        return
+    }
+
+    if len(req) == 0 {
+        http.Error(w, "body is missing", http.StatusBadRequest)
+        return
+    }
+
+    var response []BatchShortenResponse
+
+    for _, item := range req {
+        shortURL := helpers.GenerateShortURL(item.OriginalURL)
+        h.store.Set(shortURL, item.OriginalURL)
+
+        resp := BatchShortenResponse{
+          CorrelationID: item.CorrelationID,
+          ShortURL: h.server.BaseURL + "/" + shortURL,
+        }
+
+        response = append(response, resp)
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusCreated)
+
+    json.NewEncoder(w).Encode(response)
 }
