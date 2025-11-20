@@ -2,6 +2,7 @@ package handler
 
 import (
     "net/http"
+    "net/url"
     "net/http/httptest"
     "strings"
     "encoding/json"
@@ -15,8 +16,8 @@ import (
 )
 
 func testData() (h *Handler, originalURL string, shortURL string) {
-    store, _ := storage.NewStorage(config.DefaultDatabaseDSN, config.DefaultFilePath)
-    h = NewHandler(store, config.ServerData(config.DefaultURL))
+    store, _ := storage.NewStorage("", nil)
+    h = NewHandler(store, config.ServerData(config.DefaultURL), nil)
     originalURL = "https://practicum.yandex.ru"
     shortURL = helpers.GenerateShortURL(originalURL)
 
@@ -25,7 +26,7 @@ func testData() (h *Handler, originalURL string, shortURL string) {
 
 func TestPostURLHandler(t *testing.T) {
     h, originalURL, shortURL := testData()
-    shortURL = h.server.BaseURL + "/" + shortURL
+    shortURL, _ = url.JoinPath(h.server.BaseURL, shortURL)
 
     // описываем набор данных: метод запроса, ожидаемый код ответа, тело ответа, тело запроса
     testCases := []struct {
@@ -90,7 +91,7 @@ func TestGetURLHandler(t *testing.T) {
 
 func TestAPIShortenPostURLHandler(t *testing.T) {
     h, originalURL, shortURL := testData()
-    shortURL = h.server.BaseURL + "/" + shortURL
+    shortURL, _ = url.JoinPath(h.server.BaseURL, shortURL)
 
     requestData := ShortenRequest{
         URL: originalURL,
@@ -135,7 +136,7 @@ func TestAPIShortenPostURLHandler(t *testing.T) {
 
 func TestAPIShortenBatchPostURLHandler(t *testing.T) {
     h, originalURL, shortURL := testData()
-    shortURL = h.server.BaseURL + "/" + shortURL
+    shortURL, _ = url.JoinPath(h.server.BaseURL, shortURL)
     correlationID := "1"
 
     var requestData []BatchShortenRequest

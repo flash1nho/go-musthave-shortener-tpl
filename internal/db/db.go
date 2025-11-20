@@ -2,16 +2,17 @@ package db
 
 import (
 		"context"
+		"fmt"
 
-		"github.com/jackc/pgx/v5"
+		"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func Connect(databaseDSN string) (*pgx.Conn, error) {
-		conn, err := pgx.Connect(context.Background(), databaseDSN)
+func Connect(databaseDSN string) (*pgxpool.Pool, error) {
+		pool, err := pgxpool.New(context.Background(), databaseDSN)
 
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("ошибка подключения к базе данных: %w", err)
 		}
 
-		return conn, nil
+		return pool, nil
 }

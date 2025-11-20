@@ -7,7 +7,8 @@ import (
 		"bufio"
 		"context"
 
-		"github.com/flash1nho/go-musthave-shortener-tpl/internal/db"
+    "github.com/jackc/pgx/v5"
+		"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type URLMapping struct {
@@ -18,26 +19,36 @@ type URLMapping struct {
 
 type Storage struct {
 		mu          sync.RWMutex
-		DatabaseDSN string
 		filePath    string
+		Pool        *pgxpool.Pool
 		urlMappings map[string]string
 }
 
-func NewStorage(databaseDSN string, filePath string) (*Storage, error) {
+func NewStorage(filePath string, pool *pgxpool.Pool) (*Storage, error) {
+    if pool != nil {
+        err := pool.Ping(context.TODO())
+
+        if err != nil {
+            pool = nil
+        }
+    }
+
 		s := &Storage{
-			  DatabaseDSN: databaseDSN,
 			  filePath:    filePath,
+			  Pool:        pool,
 				urlMappings: make(map[string]string),
 		}
 
-    if s.DatabaseDSN != "" {
-				err := s.dbLoad()
+		var err error
+
+    if s.Pool != nil {
+				err = s.dbLoad()
 
 				if err != nil && !os.IsNotExist(err) {
 						return nil, err
 				}
 		} else if s.filePath != "" {
-				err := s.fileLoad()
+				err = s.fileLoad()
 
 				if err != nil {
 						return nil, err
@@ -84,19 +95,13 @@ func (s *Storage) dbLoad() error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
-    conn, err := db.Connect(s.DatabaseDSN)
-
-		if err != nil {
-				return err
-		}
-
-		defer conn.Close(context.Background())
-
-		rows, err := conn.Query(context.Background(), "SELECT original_url, short_url FROM shorten_urls;")
+		rows, err := s.Pool.Query(context.TODO(), "SELECT original_url, short_url FROM shorten_urls;")
 
 		if err != nil {
 		    return err
 		}
+
+		defer rows.Close()
 
 		for rows.Next() {
 		    var (
@@ -120,9 +125,9 @@ func (s *Storage) save(key string, value string) error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
-		var err error = nil
+		var err error
 
-	  if s.DatabaseDSN != "" {
+	  if s.Pool != nil {
 				err = s.dbSave(value, key)
 		} else if s.filePath != "" {
 				err = s.fileSave()
@@ -162,19 +167,36 @@ func (s *Storage) fileSave() error {
 }
 
 func (s *Storage) dbSave(originalURL string, shortURL string) error {
-    conn, err := db.Connect(s.DatabaseDSN)
+    insertSQL := `INSERT INTO shorten_urls (original_url, short_url) VALUES ($1, $2)`
+    _, err := s.Pool.Exec(context.TODO(), insertSQL, originalURL, shortURL)
 
 		if err != nil {
 				return err
 		}
 
-		defer conn.Close(context.Background())
+		return nil
+}
 
-    insertSQL := `INSERT INTO shorten_urls (original_url, short_url) VALUES ($1, $2)`
-    _, err = conn.Exec(context.Background(), insertSQL, originalURL, shortURL)
+func (s *Storage) dbSaveBatch(batch map[string]string) error {
+		pb := &pgx.Batch{}
 
-		if err != nil {
+    for shortURL, originalURL := range batch {
+			  pb.Queue(`INSERT INTO shorten_urls (original_url, short_url) VALUES ($1, $2)`, originalURL, shortURL)
+		}
+
+		if s.Pool == nil {
+				return nil
+		}
+
+		results := s.Pool.SendBatch(context.TODO(), pb)
+		defer results.Close()
+
+		for i := 0; i < len(batch); i++ {
+			_, err := results.Exec()
+
+			if err != nil {
 				return err
+			}
 		}
 
 		return nil
@@ -186,6 +208,18 @@ func (s *Storage) Set(key string, value string) error {
 	  s.mu.Unlock()
 
 	  return s.save(key, value)
+}
+
+func (s *Storage) SetBatch(batch map[string]string) error {
+	  s.mu.Lock()
+
+	  for shortURL, originalURL := range batch {
+			  s.urlMappings[shortURL] = originalURL
+		}
+
+	  s.mu.Unlock()
+
+	  return s.dbSaveBatch(batch)
 }
 
 func (s *Storage) Get(key string) (string, bool) {

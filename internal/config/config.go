@@ -2,7 +2,6 @@ package config
 
 import (
     "flag"
-    "fmt"
     "errors"
     "strings"
     "strconv"
@@ -11,17 +10,11 @@ import (
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/logger"
 
     "go.uber.org/zap"
-
-    "github.com/golang-migrate/migrate/v4"
-    _ "github.com/golang-migrate/migrate/v4/database/postgres"
-    _ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 const (
     DefaultHost = "localhost:8080"
     DefaultURL = "http://localhost:8080"
-    DefaultFilePath = ""
-    DefaultDatabaseDSN = ""
 )
 
 type Server struct {
@@ -68,58 +61,48 @@ func Settings() (Server, Server, *zap.Logger, string, string) {
     flag.Var(serverAddress2, "b", "значение может быть таким: " + DefaultHost + "|" + DefaultURL)
 
     var databaseDSN string
-    flag.StringVar(&databaseDSN, "d", DefaultDatabaseDSN, "реквизиты базы данных")
+    flag.StringVar(&databaseDSN, "d", "", "реквизиты базы данных")
 
     var filePath string
-    flag.StringVar(&filePath, "f", DefaultFilePath, "путь к файлу для хранения данных")
+    flag.StringVar(&filePath, "f", "", "путь к файлу для хранения данных")
 
     flag.Parse()
 
-    if envDatabaseDSN := os.Getenv("DATABASE_DSN"); envDatabaseDSN != "" {
+    envDatabaseDSN, ok := os.LookupEnv("DATABASE_DSN")
+
+    if ok {
         databaseDSN = envDatabaseDSN
     }
 
-    if envPath := os.Getenv("FILE_STORAGE_PATH"); envPath != "" {
+    envPath, ok := os.LookupEnv("FILE_STORAGE_PATH")
+
+    if ok {
         filePath = envPath
     }
 
     logger.Initialize("info")
 
-    runMigrations(databaseDSN, logger.Log)
-
-    return ServerData(fmt.Sprint(serverAddress1)),
-           ServerData(fmt.Sprint(serverAddress2)),
+    return ServerData(serverAddress1.String()),
+           ServerData(serverAddress2.String()),
            logger.Log,
            databaseDSN,
            filePath
 }
 
 func ServerData(serverAddress string) Server {
+
     if envServerAddress := os.Getenv("SERVER_ADDRESS"); envServerAddress != "" {
         serverAddress = envServerAddress
     } else if serverAddress == ":0" {
         serverAddress = DefaultHost
     }
 
-    serverBaseURL := "http://" + serverAddress
+    trimmedServerAddress := strings.TrimPrefix(serverAddress, "http://")
+    serverBaseURL := "http://" + trimmedServerAddress
 
     if envBaseURL := os.Getenv("BASE_URL"); envBaseURL != "" {
         serverBaseURL = envBaseURL
     }
 
     return Server{Addr: serverAddress, BaseURL: serverBaseURL}
-}
-
-func runMigrations(databaseDSN string, log *zap.Logger) {
-    if databaseDSN != "" {
-        m, err := migrate.New("file://migrations", databaseDSN)
-
-        if err != nil {
-            log.Fatal(fmt.Sprintf("Ошибка загрузки миграций: %v", err))
-        }
-
-        if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-            log.Fatal(fmt.Sprintf("Ошибка запуска миграций: %v", err))
-        }
-    }
 }

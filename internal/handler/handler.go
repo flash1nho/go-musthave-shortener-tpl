@@ -3,18 +3,19 @@ package handler
 import (
     "fmt"
     "net/http"
+    "net/url"
     "io"
     "encoding/json"
-    "context"
     "errors"
+    "context"
 
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/helpers"
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/storage"
-    "github.com/flash1nho/go-musthave-shortener-tpl/internal/db"
 
     "github.com/jackc/pgx/v5/pgconn"
     "github.com/jackc/pgerrcode"
+    "go.uber.org/zap"
 )
 
 type ShortenRequest struct {
@@ -35,15 +36,21 @@ type BatchShortenResponse struct {
     ShortURL      string `json:"short_url"`
 }
 
-type Handler struct {
-    store *storage.Storage
-    server config.Server
+type Batch struct {
+    urlMappings map[string]string
 }
 
-func NewHandler(store *storage.Storage, server config.Server) *Handler {
+type Handler struct {
+    store  *storage.Storage
+    server config.Server
+    log    *zap.Logger
+}
+
+func NewHandler(store *storage.Storage, server config.Server, log *zap.Logger) *Handler {
     return &Handler{
-        store: store,
+        store:  store,
         server: server,
+        log:    log,
     }
 }
 
@@ -110,22 +117,23 @@ func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Reques
     err = h.store.Set(shortURL, req.URL)
     handleStatusConflict(w, err)
 
+    shortURL, _ = url.JoinPath(h.server.BaseURL, shortURL)
+
     response := ShortenResponse{
-        Result: h.server.BaseURL + "/" + shortURL,
+        Result: shortURL,
     }
 
     json.NewEncoder(w).Encode(response)
 }
 
 func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
-    conn, err := db.Connect(h.store.DatabaseDSN)
+    err := h.store.Pool.Ping(context.TODO())
 
     if err != nil {
-        http.Error(w, err.Error(), http.StatusInternalServerError)
+        http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+        h.log.Fatal(fmt.Sprintf("Ошибка пинга БД: %v", err))
         return
     }
-
-    defer conn.Close(context.Background())
 
     w.WriteHeader(http.StatusOK)
 }
@@ -149,17 +157,25 @@ func (h *Handler) APIShortenBatchPostURLHandler(w http.ResponseWriter, r *http.R
 
     var response []BatchShortenResponse
 
+    batch := &Batch{
+        urlMappings: make(map[string]string),
+    }
+
     for _, item := range req {
-        shortURL := helpers.GenerateShortURL(item.OriginalURL)
-        h.store.Set(shortURL, item.OriginalURL)
+        sURL := helpers.GenerateShortURL(item.OriginalURL)
+        shortURL, _ := url.JoinPath(h.server.BaseURL, sURL)
 
         resp := BatchShortenResponse{
           CorrelationID: item.CorrelationID,
-          ShortURL: h.server.BaseURL + "/" + shortURL,
+          ShortURL: shortURL,
         }
+
+        batch.urlMappings[sURL] = item.OriginalURL
 
         response = append(response, resp)
     }
+
+    h.store.SetBatch(batch.urlMappings)
 
     w.WriteHeader(http.StatusCreated)
 
