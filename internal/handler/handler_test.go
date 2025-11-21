@@ -16,7 +16,7 @@ import (
 )
 
 func testData() (h *Handler, originalURL string, shortURL string) {
-    store, _ := storage.NewStorage("", nil)
+    store, _ := storage.NewStorage("", "")
     h = NewHandler(store, config.ServerData(config.DefaultURL), nil)
     originalURL = "https://practicum.yandex.ru"
     shortURL = helpers.GenerateShortURL(originalURL)

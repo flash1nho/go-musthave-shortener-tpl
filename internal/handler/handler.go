@@ -7,7 +7,6 @@ import (
     "io"
     "encoding/json"
     "errors"
-    "context"
 
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/helpers"
@@ -127,11 +126,9 @@ func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
-    err := h.store.Pool.Ping(context.TODO())
-
-    if err != nil {
+    if h.store.Pool == nil {
         http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-        h.log.Fatal(fmt.Sprintf("Ошибка пинга БД: %v", err))
+        h.log.Fatal("ошибка пинга базы данных")
         return
     }
 
@@ -163,7 +160,13 @@ func (h *Handler) APIShortenBatchPostURLHandler(w http.ResponseWriter, r *http.R
 
     for _, item := range req {
         sURL := helpers.GenerateShortURL(item.OriginalURL)
-        shortURL, _ := url.JoinPath(h.server.BaseURL, sURL)
+        shortURL, err := url.JoinPath(h.server.BaseURL, sURL)
+
+        if err != nil {
+            http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+            h.log.Fatal(fmt.Sprintf("Ошибка батчинга: %v", err))
+            return
+        }
 
         resp := BatchShortenResponse{
           CorrelationID: item.CorrelationID,

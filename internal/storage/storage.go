@@ -6,9 +6,16 @@ import (
 		"os"
 		"bufio"
 		"context"
+		"fmt"
+
+		"github.com/flash1nho/go-musthave-shortener-tpl/internal/db"
 
     "github.com/jackc/pgx/v5"
 		"github.com/jackc/pgx/v5/pgxpool"
+
+    "github.com/golang-migrate/migrate/v4"
+    _ "github.com/golang-migrate/migrate/v4/database/postgres"
+    _ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 type URLMapping struct {
@@ -24,22 +31,33 @@ type Storage struct {
 		urlMappings map[string]string
 }
 
-func NewStorage(filePath string, pool *pgxpool.Pool) (*Storage, error) {
-    if pool != nil {
-        err := pool.Ping(context.TODO())
+func NewStorage(filePath string, databaseDSN string) (*Storage, error) {
+	  var pool *pgxpool.Pool = nil
+	  var err error
 
-        if err != nil {
-            pool = nil
-        }
-    }
+    if databaseDSN != "" {
+			  pool, err = db.Connect(databaseDSN)
+
+			  if err != nil {
+			  		return nil, err
+			  }
+
+		    m, err := migrate.New("file://migrations", databaseDSN)
+
+		    if err != nil {
+		    	  return nil, fmt.Errorf("ошибка загрузки миграций: %w", err)
+		    }
+
+		    if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		        return nil, fmt.Errorf("ошибка запуска миграций: %w", err)
+		    }
+	  }
 
 		s := &Storage{
 			  filePath:    filePath,
 			  Pool:        pool,
 				urlMappings: make(map[string]string),
 		}
-
-		var err error
 
     if s.Pool != nil {
 				err = s.dbLoad()

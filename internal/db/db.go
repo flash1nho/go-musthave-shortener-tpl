@@ -14,5 +14,11 @@ func Connect(databaseDSN string) (*pgxpool.Pool, error) {
 			return nil, fmt.Errorf("ошибка подключения к базе данных: %w", err)
 		}
 
+		err = pool.Ping(context.TODO())
+
+		if err != nil {
+			return nil, fmt.Errorf("ошибка пинга базы данных: %w", err)
+		}
+
 		return pool, nil
 }
