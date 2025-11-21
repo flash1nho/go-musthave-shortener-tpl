@@ -2,7 +2,6 @@ package config
 
 import (
     "flag"
-    "fmt"
     "errors"
     "strings"
     "strconv"
@@ -16,7 +15,6 @@ import (
 const (
     DefaultHost = "localhost:8080"
     DefaultURL = "http://localhost:8080"
-    DefaultFilePath = "/tmp/shorten.json"
 )
 
 type Server struct {
@@ -53,7 +51,7 @@ func (addr *NetAddress) Set(s string) error {
     return nil
 }
 
-func Settings() (Server, Server, string, *zap.Logger) {
+func Settings() (Server, Server, *zap.Logger, string, string) {
     serverAddress1 := new(NetAddress)
     _ = flag.Value(serverAddress1)
     flag.Var(serverAddress1, "a", "значение может быть таким: " + DefaultHost + "|" + DefaultURL)
@@ -62,28 +60,45 @@ func Settings() (Server, Server, string, *zap.Logger) {
     _ = flag.Value(serverAddress2)
     flag.Var(serverAddress2, "b", "значение может быть таким: " + DefaultHost + "|" + DefaultURL)
 
+    var databaseDSN string
+    flag.StringVar(&databaseDSN, "d", "", "реквизиты базы данных")
+
     var filePath string
-    flag.StringVar(&filePath, "f", DefaultFilePath, "путь к файлу для хранения данных")
+    flag.StringVar(&filePath, "f", "", "путь к файлу для хранения данных")
 
     flag.Parse()
 
-    if envPath := os.Getenv("FILE_STORAGE_PATH"); envPath != "" {
+    envDatabaseDSN, ok := os.LookupEnv("DATABASE_DSN")
+
+    if ok {
+        databaseDSN = envDatabaseDSN
+    }
+
+    envPath, ok := os.LookupEnv("FILE_STORAGE_PATH")
+
+    if ok {
         filePath = envPath
     }
 
     logger.Initialize("info")
 
-    return ServerData(fmt.Sprint(serverAddress1)), ServerData(fmt.Sprint(serverAddress2)), filePath, logger.Log
+    return ServerData(serverAddress1.String()),
+           ServerData(serverAddress2.String()),
+           logger.Log,
+           databaseDSN,
+           filePath
 }
 
 func ServerData(serverAddress string) Server {
+
     if envServerAddress := os.Getenv("SERVER_ADDRESS"); envServerAddress != "" {
         serverAddress = envServerAddress
     } else if serverAddress == ":0" {
         serverAddress = DefaultHost
     }
 
-    serverBaseURL := "http://" + serverAddress
+    trimmedServerAddress := strings.TrimPrefix(serverAddress, "http://")
+    serverBaseURL := "http://" + trimmedServerAddress
 
     if envBaseURL := os.Getenv("BASE_URL"); envBaseURL != "" {
         serverBaseURL = envBaseURL

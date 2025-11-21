@@ -3,12 +3,18 @@ package handler
 import (
     "fmt"
     "net/http"
+    "net/url"
     "io"
     "encoding/json"
+    "errors"
 
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/helpers"
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/storage"
+
+    "github.com/jackc/pgx/v5/pgconn"
+    "github.com/jackc/pgerrcode"
+    "go.uber.org/zap"
 )
 
 type ShortenRequest struct {
@@ -19,15 +25,31 @@ type ShortenResponse struct {
     Result string `json:"result"`
 }
 
-type Handler struct {
-    store *storage.FileStorage
-    server config.Server
+type BatchShortenRequest struct {
+    CorrelationID string `json:"correlation_id"`
+    OriginalURL   string `json:"original_url"`
 }
 
-func NewHandler(store *storage.FileStorage, server config.Server) *Handler {
+type BatchShortenResponse struct {
+    CorrelationID string `json:"correlation_id"`
+    ShortURL      string `json:"short_url"`
+}
+
+type Batch struct {
+    urlMappings map[string]string
+}
+
+type Handler struct {
+    store  *storage.Storage
+    server config.Server
+    log    *zap.Logger
+}
+
+func NewHandler(store *storage.Storage, server config.Server, log *zap.Logger) *Handler {
     return &Handler{
-        store: store,
+        store:  store,
         server: server,
+        log:    log,
     }
 }
 
@@ -49,9 +71,9 @@ func (h *Handler) PostURLHandler(w http.ResponseWriter, r *http.Request) {
     }
 
     shortURL := helpers.GenerateShortURL(originalURL)
-    h.store.Set(shortURL, originalURL)
+    err = h.store.Set(shortURL, originalURL)
+    handleStatusConflict(w, err)
 
-    w.WriteHeader(http.StatusCreated)
     fmt.Fprintf(w, "%s/%s", h.server.BaseURL, shortURL)
 }
 
@@ -74,6 +96,8 @@ func (h *Handler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+
     var req ShortenRequest
 
     err := json.NewDecoder(r.Body).Decode(&req)
@@ -89,14 +113,89 @@ func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Reques
     }
 
     shortURL := helpers.GenerateShortURL(req.URL)
-    h.store.Set(shortURL, req.URL)
+    err = h.store.Set(shortURL, req.URL)
+    handleStatusConflict(w, err)
+
+    shortURL, _ = url.JoinPath(h.server.BaseURL, shortURL)
 
     response := ShortenResponse{
-        Result: h.server.BaseURL + "/" + shortURL,
+        Result: shortURL,
     }
 
+    json.NewEncoder(w).Encode(response)
+}
+
+func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
+    if h.store.Pool == nil {
+        http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+        h.log.Fatal("ошибка пинга базы данных")
+        return
+    }
+
+    w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) APIShortenBatchPostURLHandler(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
+
+    var req []BatchShortenRequest
+
+    err := json.NewDecoder(r.Body).Decode(&req)
+
+    if err != nil {
+        http.Error(w, "Invalid request body", http.StatusBadRequest)
+        return
+    }
+
+    if len(req) == 0 {
+        http.Error(w, "body is missing", http.StatusBadRequest)
+        return
+    }
+
+    var response []BatchShortenResponse
+
+    batch := &Batch{
+        urlMappings: make(map[string]string),
+    }
+
+    for _, item := range req {
+        sURL := helpers.GenerateShortURL(item.OriginalURL)
+        shortURL, err := url.JoinPath(h.server.BaseURL, sURL)
+
+        if err != nil {
+            http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+            h.log.Fatal(fmt.Sprintf("Ошибка батчинга: %v", err))
+            return
+        }
+
+        resp := BatchShortenResponse{
+          CorrelationID: item.CorrelationID,
+          ShortURL: shortURL,
+        }
+
+        batch.urlMappings[sURL] = item.OriginalURL
+
+        response = append(response, resp)
+    }
+
+    h.store.SetBatch(batch.urlMappings)
+
     w.WriteHeader(http.StatusCreated)
 
     json.NewEncoder(w).Encode(response)
+}
+
+func handleStatusConflict(w http.ResponseWriter, err error) {
+    if err != nil {
+        var pgErr *pgconn.PgError
+
+        if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+            w.WriteHeader(http.StatusConflict)
+        } else {
+            http.Error(w, "Invalid request body", http.StatusBadRequest)
+            return
+        }
+    } else {
+        w.WriteHeader(http.StatusCreated)
+    }
 }
