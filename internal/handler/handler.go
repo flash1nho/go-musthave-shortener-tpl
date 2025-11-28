@@ -35,6 +35,11 @@ type BatchShortenResponse struct {
     ShortURL      string `json:"short_url"`
 }
 
+type BatchUserShortenResponse struct {
+    ShortURL    string `json:"short_url"`
+    OriginalURL string `json:"original_url"`
+}
+
 type Batch struct {
     urlMappings map[string]string
 }
@@ -54,6 +59,22 @@ func NewHandler(store *storage.Storage, server config.Server, log *zap.Logger) *
 }
 
 func (h *Handler) PostURLHandler(w http.ResponseWriter, r *http.Request) {
+    userID, err := helpers.GetUserIDFromCookie(r)
+
+    if err != nil || userID == "" {
+        userID, err = helpers.GenerateUniqueUserID()
+
+        if err != nil {
+            http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+            return
+        }
+
+        if err := helpers.SetSignedCookie(w, userID); err != nil {
+            http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+            return
+        }
+    }
+
     body, err := io.ReadAll(r.Body)
 
     if err != nil {
@@ -71,7 +92,7 @@ func (h *Handler) PostURLHandler(w http.ResponseWriter, r *http.Request) {
     }
 
     shortURL := helpers.GenerateShortURL(originalURL)
-    err = h.store.Set(shortURL, originalURL)
+    err = h.store.Set(shortURL, originalURL, userID)
     handleStatusConflict(w, err)
 
     fmt.Fprintf(w, "%s/%s", h.server.BaseURL, shortURL)
@@ -113,7 +134,7 @@ func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Reques
     }
 
     shortURL := helpers.GenerateShortURL(req.URL)
-    err = h.store.Set(shortURL, req.URL)
+    err = h.store.Set(shortURL, req.URL, "")
     handleStatusConflict(w, err)
 
     shortURL, _ = url.JoinPath(h.server.BaseURL, shortURL)
@@ -181,6 +202,56 @@ func (h *Handler) APIShortenBatchPostURLHandler(w http.ResponseWriter, r *http.R
     h.store.SetBatch(batch.urlMappings)
 
     w.WriteHeader(http.StatusCreated)
+
+    json.NewEncoder(w).Encode(response)
+}
+
+func (h *Handler) APIUserURLHandler(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+
+    userID, err := helpers.GetUserIDFromCookie(r)
+
+    if err != nil || userID == "" {
+        if err := helpers.SetSignedCookie(w, userID); err != nil {
+            http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+            return
+        } else {
+            w.WriteHeader(http.StatusNoContent)
+            return
+        }
+
+        http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+        return
+    }
+
+    var response []BatchUserShortenResponse
+
+    batch, err := h.store.GetURLsByUserID(userID)
+
+    if err != nil {
+        http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+        h.log.Fatal(fmt.Sprintf("Ошибка получения URLs по user_id: %v", err))
+        return
+    }
+
+    for sURL, originalURL := range batch {
+        shortURL, err := url.JoinPath(h.server.BaseURL, sURL)
+
+        if err != nil {
+            http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+            h.log.Fatal(fmt.Sprintf("Ошибка батчинга: %v", err))
+            return
+        }
+
+        resp := BatchUserShortenResponse{
+          ShortURL: shortURL,
+          OriginalURL: originalURL,
+        }
+
+        response = append(response, resp)
+    }
+
+    w.WriteHeader(http.StatusOK)
 
     json.NewEncoder(w).Encode(response)
 }

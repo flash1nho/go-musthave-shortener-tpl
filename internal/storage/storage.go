@@ -31,6 +31,10 @@ type Storage struct {
 		urlMappings map[string]string
 }
 
+type Batch struct {
+    urlMappings map[string]string
+}
+
 func NewStorage(filePath string, databaseDSN string) (*Storage, error) {
 	  var pool *pgxpool.Pool = nil
 	  var err error
@@ -139,14 +143,14 @@ func (s *Storage) dbLoad() error {
 		return nil
 }
 
-func (s *Storage) save(key string, value string) error {
+func (s *Storage) save(key string, value string, userID string) error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
 		var err error
 
 	  if s.Pool != nil {
-				err = s.dbSave(value, key)
+				err = s.dbSave(value, key, userID)
 		} else if s.filePath != "" {
 				err = s.fileSave()
 		}
@@ -184,9 +188,9 @@ func (s *Storage) fileSave() error {
 		return nil
 }
 
-func (s *Storage) dbSave(originalURL string, shortURL string) error {
-    insertSQL := `INSERT INTO shorten_urls (original_url, short_url) VALUES ($1, $2)`
-    _, err := s.Pool.Exec(context.TODO(), insertSQL, originalURL, shortURL)
+func (s *Storage) dbSave(originalURL string, shortURL string, userID string) error {
+    insertSQL := `INSERT INTO shorten_urls (original_url, short_url, user_id) VALUES ($1, $2, $3)`
+    _, err := s.Pool.Exec(context.TODO(), insertSQL, originalURL, shortURL, userID)
 
 		if err != nil {
 				return err
@@ -220,12 +224,12 @@ func (s *Storage) dbSaveBatch(batch map[string]string) error {
 		return nil
 }
 
-func (s *Storage) Set(key string, value string) error {
+func (s *Storage) Set(key string, value string, userID string) error {
 	  s.mu.Lock()
 	  s.urlMappings[key] = value
 	  s.mu.Unlock()
 
-	  return s.save(key, value)
+	  return s.save(key, value, userID)
 }
 
 func (s *Storage) SetBatch(batch map[string]string) error {
@@ -246,4 +250,39 @@ func (s *Storage) Get(key string) (string, bool) {
 	  value, found := s.urlMappings[key]
 
 	  return value, found
+}
+
+func (s *Storage) GetURLsByUserID(userID string) (map[string]string, error) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+
+    query := `SELECT original_url, short_url FROM shorten_urls WHERE user_id = $1`
+		rows, err := s.Pool.Query(context.TODO(), query, userID)
+
+		if err != nil {
+		    return nil, err
+		}
+
+		defer rows.Close()
+
+    batch := &Batch{
+        urlMappings: make(map[string]string),
+    }
+
+		for rows.Next() {
+		    var (
+		        originalURL string
+		        shortURL    string
+		    )
+
+		    err = rows.Scan(&originalURL, &shortURL)
+
+		    if err != nil {
+		        return nil, err
+		    }
+
+		    batch.urlMappings[shortURL] = originalURL
+		}
+
+		return batch.urlMappings, nil
 }

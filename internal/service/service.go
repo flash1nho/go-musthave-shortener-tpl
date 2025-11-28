@@ -63,6 +63,7 @@ func (s *Service) mainRouter() http.Handler {
     r.Get("/{id}", s.handler.GetURLHandler)
     r.Get("/ping", s.handler.Ping)
     r.Post("/api/shorten/batch", s.handler.APIShortenBatchPostURLHandler)
+    r.Get("/api/user/urls", s.handler.APIUserURLHandler)
 
     return r
 }
