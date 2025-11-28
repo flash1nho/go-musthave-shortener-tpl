@@ -64,6 +64,7 @@ func (s *Service) mainRouter() http.Handler {
     r.Get("/ping", s.handler.Ping)
     r.Post("/api/shorten/batch", s.handler.APIShortenBatchPostURLHandler)
     r.Get("/api/user/urls", s.handler.APIUserURLHandler)
+    r.Delete("/api/user/urls", s.handler.APIUserDeleteURLHandler)
 
     return r
 }

@@ -117,7 +117,7 @@ func (s *Storage) dbLoad() error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
-		rows, err := s.Pool.Query(context.TODO(), "SELECT original_url, short_url FROM shorten_urls;")
+		rows, err := s.Pool.Query(context.TODO(), "SELECT original_url, short_url FROM shorten_urls WHERE is_deleted = FALSE")
 
 		if err != nil {
 		    return err
@@ -200,14 +200,14 @@ func (s *Storage) dbSave(originalURL string, shortURL string, userID string) err
 }
 
 func (s *Storage) dbSaveBatch(batch map[string]string) error {
-		pb := &pgx.Batch{}
+		if s.Pool == nil {
+				return nil
+		}
+
+    pb := &pgx.Batch{}
 
     for shortURL, originalURL := range batch {
 			  pb.Queue(`INSERT INTO shorten_urls (original_url, short_url) VALUES ($1, $2)`, originalURL, shortURL)
-		}
-
-		if s.Pool == nil {
-				return nil
 		}
 
 		results := s.Pool.SendBatch(context.TODO(), pb)
@@ -256,7 +256,7 @@ func (s *Storage) GetURLsByUserID(userID string) (map[string]string, error) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
-    query := `SELECT original_url, short_url FROM shorten_urls WHERE user_id = $1`
+    query := `SELECT original_url, short_url FROM shorten_urls WHERE user_id = $1 AND is_deleted = FALSE`
 		rows, err := s.Pool.Query(context.TODO(), query, userID)
 
 		if err != nil {
@@ -285,4 +285,46 @@ func (s *Storage) GetURLsByUserID(userID string) (map[string]string, error) {
 		}
 
 		return batch.urlMappings, nil
+}
+
+func (s *Storage) DeleteBatch(userID string, urls []string) {
+    var wg sync.WaitGroup
+    errorsChan := make(chan error, len(urls))
+
+    wg.Add(1)
+
+    go func(urls []string) {
+        defer wg.Done()
+        processDeleteBatch(s, userID, urls, errorsChan)
+    }(urls)
+
+    go func() {
+        wg.Wait()
+        close(errorsChan)
+    }()
+}
+
+func processDeleteBatch(s *Storage, userID string, urls []string, errChan chan<- error) {
+		if s.Pool == nil {
+				return
+		}
+
+		pb := &pgx.Batch{}
+
+    for _, url := range urls {
+			  pb.Queue(`UPDATE shorten_urls SET is_deleted = TRUE WHERE user_id = $1 AND short_url = $2`, userID, url)
+		}
+
+		results := s.Pool.SendBatch(context.TODO(), pb)
+		defer results.Close()
+
+		for i := 0; i < len(urls); i++ {
+				_, err := results.Exec()
+
+				if err != nil {
+						errChan <- fmt.Errorf("ошибка выполнения запроса %d в batch: %w", i, err)
+				} else {
+						delete(s.urlMappings, urls[i])
+				}
+		}
 }

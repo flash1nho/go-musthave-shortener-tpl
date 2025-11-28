@@ -109,7 +109,14 @@ func (h *Handler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
     originalURL, found := h.store.Get(shortURL)
 
     if !found {
-        http.Error(w, "Short URL not found", http.StatusBadRequest)
+        userID, err := helpers.GetUserIDFromCookie(r)
+
+        if err != nil || userID == "" {
+          http.Error(w, "Short URL not found", http.StatusBadRequest)
+        } else {
+          http.Error(w, "Short URL not found", http.StatusGone)
+        }
+
         return
     }
 
@@ -213,14 +220,11 @@ func (h *Handler) APIUserURLHandler(w http.ResponseWriter, r *http.Request) {
 
     if err != nil || userID == "" {
         if err := helpers.SetSignedCookie(w, userID); err != nil {
-            http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-            return
+            w.WriteHeader(http.StatusUnauthorized)
         } else {
             w.WriteHeader(http.StatusNoContent)
-            return
         }
 
-        http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
         return
     }
 
@@ -254,6 +258,27 @@ func (h *Handler) APIUserURLHandler(w http.ResponseWriter, r *http.Request) {
     w.WriteHeader(http.StatusOK)
 
     json.NewEncoder(w).Encode(response)
+}
+
+func (h *Handler) APIUserDeleteURLHandler(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+
+    userID, err := helpers.GetUserIDFromCookie(r)
+
+    if err == nil && userID != "" {
+        var urls []string
+
+        err := json.NewDecoder(r.Body).Decode(&urls)
+
+        if err != nil {
+            http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+            return
+        }
+
+        h.store.DeleteBatch(userID, urls)
+    }
+
+    w.WriteHeader(http.StatusAccepted)
 }
 
 func handleStatusConflict(w http.ResponseWriter, err error) {
