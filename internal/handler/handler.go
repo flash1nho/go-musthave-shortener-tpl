@@ -7,10 +7,12 @@ import (
     "io"
     "encoding/json"
     "errors"
+    "context"
 
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/helpers"
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/storage"
+    "github.com/flash1nho/go-musthave-shortener-tpl/internal/middlewares"
 
     "github.com/jackc/pgx/v5/pgconn"
     "github.com/jackc/pgerrcode"
@@ -35,6 +37,11 @@ type BatchShortenResponse struct {
     ShortURL      string `json:"short_url"`
 }
 
+type BatchUserShortenResponse struct {
+    ShortURL    string `json:"short_url"`
+    OriginalURL string `json:"original_url"`
+}
+
 type Batch struct {
     urlMappings map[string]string
 }
@@ -54,6 +61,8 @@ func NewHandler(store *storage.Storage, server config.Server, log *zap.Logger) *
 }
 
 func (h *Handler) PostURLHandler(w http.ResponseWriter, r *http.Request) {
+    userID := getUserFromContext(r.Context())
+
     body, err := io.ReadAll(r.Body)
 
     if err != nil {
@@ -71,7 +80,7 @@ func (h *Handler) PostURLHandler(w http.ResponseWriter, r *http.Request) {
     }
 
     shortURL := helpers.GenerateShortURL(originalURL)
-    err = h.store.Set(shortURL, originalURL)
+    err = h.store.Set(shortURL, originalURL, userID)
     handleStatusConflict(w, err)
 
     fmt.Fprintf(w, "%s/%s", h.server.BaseURL, shortURL)
@@ -85,14 +94,19 @@ func (h *Handler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    originalURL, found := h.store.Get(shortURL)
+    URLDetails, found := h.store.Get(shortURL)
 
     if !found {
         http.Error(w, "Short URL not found", http.StatusBadRequest)
         return
     }
 
-    http.Redirect(w, r, originalURL, http.StatusTemporaryRedirect)
+    if URLDetails.IsDeleted {
+        w.WriteHeader(http.StatusGone)
+        return
+    }
+
+    http.Redirect(w, r, URLDetails.OriginalURL, http.StatusTemporaryRedirect)
 }
 
 func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +127,7 @@ func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Reques
     }
 
     shortURL := helpers.GenerateShortURL(req.URL)
-    err = h.store.Set(shortURL, req.URL)
+    err = h.store.Set(shortURL, req.URL, "")
     handleStatusConflict(w, err)
 
     shortURL, _ = url.JoinPath(h.server.BaseURL, shortURL)
@@ -128,7 +142,7 @@ func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Reques
 func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
     if h.store.Pool == nil {
         http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-        h.log.Fatal("ошибка пинга базы данных")
+        h.log.Error("ошибка пинга базы данных")
         return
     }
 
@@ -164,7 +178,7 @@ func (h *Handler) APIShortenBatchPostURLHandler(w http.ResponseWriter, r *http.R
 
         if err != nil {
             http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-            h.log.Fatal(fmt.Sprintf("Ошибка батчинга: %v", err))
+            h.log.Error(fmt.Sprintf("Ошибка батчинга: %v", err))
             return
         }
 
@@ -185,6 +199,73 @@ func (h *Handler) APIShortenBatchPostURLHandler(w http.ResponseWriter, r *http.R
     json.NewEncoder(w).Encode(response)
 }
 
+func (h *Handler) APIUserURLHandler(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+
+    userID := getUserFromContext(r.Context())
+    batch, err := h.store.GetURLsByUserID(userID)
+
+    if err != nil {
+        http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+        h.log.Error(fmt.Sprintf("Ошибка получения URLs по user_id: %v", err))
+        return
+    }
+
+    if len(batch) == 0 {
+        w.WriteHeader(http.StatusNoContent)
+        return
+    }
+
+    var response []BatchUserShortenResponse
+
+    for _, item := range batch {
+        shortURL, err := url.JoinPath(h.server.BaseURL, item.ShortURL)
+
+        if err != nil {
+            http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+            h.log.Error(fmt.Sprintf("Ошибка батчинга: %v", err))
+            return
+        }
+
+        resp := BatchUserShortenResponse{
+          ShortURL: shortURL,
+          OriginalURL: item.OriginalURL,
+        }
+
+        response = append(response, resp)
+    }
+
+    w.WriteHeader(http.StatusOK)
+
+    json.NewEncoder(w).Encode(response)
+}
+
+func (h *Handler) APIUserDeleteURLHandler(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+
+    userID := getUserFromContext(r.Context())
+
+    if userID != "" {
+        var urls []string
+
+        err := json.NewDecoder(r.Body).Decode(&urls)
+
+        if err != nil {
+            http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+            return
+        }
+
+        err = h.store.DeleteBatch(userID, urls)
+
+        if err != nil {
+            http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+            return
+        }
+    }
+
+    w.WriteHeader(http.StatusAccepted)
+}
+
 func handleStatusConflict(w http.ResponseWriter, err error) {
     if err != nil {
         var pgErr *pgconn.PgError
@@ -198,4 +279,14 @@ func handleStatusConflict(w http.ResponseWriter, err error) {
     } else {
         w.WriteHeader(http.StatusCreated)
     }
+}
+
+func getUserFromContext(ctx context.Context) string {
+    userID, ok := ctx.Value(middlewares.CtxUserKey).(string)
+
+    if !ok {
+        return ""
+    }
+
+    return userID
 }

@@ -7,13 +7,17 @@ import (
     "strings"
     "encoding/json"
     "testing"
+    "context"
 
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/storage"
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/helpers"
+    "github.com/flash1nho/go-musthave-shortener-tpl/internal/middlewares"
 
     "github.com/stretchr/testify/assert"
 )
+
+var userID, _ = middlewares.GenerateUniqueUserID()
 
 func testData() (h *Handler, originalURL string, shortURL string) {
     store, _ := storage.NewStorage("", "")
@@ -44,6 +48,9 @@ func TestPostURLHandler(t *testing.T) {
             r := httptest.NewRequest(tc.method, "/", strings.NewReader(tc.requestBody))
             w := httptest.NewRecorder()
 
+            ctx := context.WithValue(r.Context(), middlewares.CtxUserKey, userID)
+            r = r.WithContext(ctx)
+
             // вызовем хендлер как обычную функцию, без запуска самого сервера
             h.PostURLHandler(w, r)
 
@@ -58,7 +65,7 @@ func TestPostURLHandler(t *testing.T) {
 
 func TestGetURLHandler(t *testing.T) {
     h, originalURL, shortURL := testData()
-    h.store.Set(shortURL, originalURL)
+    h.store.Set(shortURL, originalURL, "")
 
     // описываем набор данных: метод запроса, ожидаемый код ответа, тело ответа, path запроса
     testCases := []struct {
@@ -174,6 +181,40 @@ func TestAPIShortenBatchPostURLHandler(t *testing.T) {
             if tc.responseBody != "" {
                 assert.Equal(t, tc.responseBody, strings.TrimSuffix(w.Body.String(), "\n"), "Тело ответа не совпадает с ожидаемым")
             }
+        })
+    }
+}
+
+func TestAPIUserURLHandler(t *testing.T) {
+    h, originalURL, shortURL := testData()
+    shortURL, _ = url.JoinPath(h.server.BaseURL, shortURL)
+
+    // описываем набор данных: метод запроса, ожидаемый код ответа, тело ответа, тело запроса
+    testCases := []struct {
+        method string
+        status int
+        requestBody string
+    }{
+        {method: http.MethodPost, status: http.StatusNoContent, requestBody: ""},
+        {method: http.MethodPost, status: http.StatusOK, requestBody: ""},
+    }
+
+    for _, tc := range testCases {
+        t.Run(tc.method, func(t *testing.T) {
+            r := httptest.NewRequest(tc.method, "/", strings.NewReader(tc.requestBody))
+            w := httptest.NewRecorder()
+
+            ctx := context.WithValue(r.Context(), middlewares.CtxUserKey, userID)
+            r = r.WithContext(ctx)
+
+            if tc.status == http.StatusOK {
+                h.store.Set(shortURL, originalURL, userID)
+            }
+
+            // вызовем хендлер как обычную функцию, без запуска самого сервера
+            h.APIUserURLHandler(w, r)
+
+            assert.Equal(t, tc.status, w.Code, "Код ответа не совпадает с ожидаемым")
         })
     }
 }
