@@ -8,12 +8,12 @@ import (
 		"syscall"
 		"time"
 		"fmt"
-		"compress/gzip"
 		"slices"
 		"sync"
 
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
 		"github.com/flash1nho/go-musthave-shortener-tpl/internal/handler"
+		"github.com/flash1nho/go-musthave-shortener-tpl/internal/middlewares"
 
     "github.com/go-chi/chi/v5"
     "github.com/go-chi/chi/v5/middleware"
@@ -35,34 +35,20 @@ func NewService(handler *handler.Handler, servers []config.Server, log *zap.Logg
     }
 }
 
-func Decompressor(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        if r.Header.Get("Content-Encoding") == "gzip" {
-            gzReader, err := gzip.NewReader(r.Body)
-            if err != nil {
-                http.Error(w, "Ошибка при распаковке gzip", http.StatusBadRequest)
-                return
-            }
-
-            defer gzReader.Close()
-
-            r.Body = gzReader
-        }
-        next.ServeHTTP(w, r)
-    })
-}
-
 func (s *Service) mainRouter() http.Handler {
     r := chi.NewRouter()
 
     r.Use(middleware.Logger)
-    r.Use(Decompressor)
+    r.Use(middlewares.Decompressor)
+    r.Use(middlewares.Auth)
 
     r.Post("/", s.handler.PostURLHandler)
     r.Post("/api/shorten", s.handler.APIShortenPostURLHandler)
     r.Get("/{id}", s.handler.GetURLHandler)
     r.Get("/ping", s.handler.Ping)
     r.Post("/api/shorten/batch", s.handler.APIShortenBatchPostURLHandler)
+    r.Get("/api/user/urls", s.handler.APIUserURLHandler)
+    r.Delete("/api/user/urls", s.handler.APIUserDeleteURLHandler)
 
     return r
 }
@@ -84,7 +70,7 @@ func runServer(s *Service, ctx context.Context, wg *sync.WaitGroup, addr string)
 		s.log.Info(fmt.Sprintf("Сервер запущен на http://%s", server.Addr))
 
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			s.log.Fatal(fmt.Sprintf("Ошибка запуска сервера http://%s: %v", server.Addr, err))
+			s.log.Error(fmt.Sprintf("Ошибка запуска сервера http://%s: %v", server.Addr, err))
 		}
 	}()
 

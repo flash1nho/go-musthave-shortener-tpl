@@ -58,7 +58,7 @@ func TestPostURLHandler(t *testing.T) {
 
 func TestGetURLHandler(t *testing.T) {
     h, originalURL, shortURL := testData()
-    h.store.Set(shortURL, originalURL)
+    h.store.Set(shortURL, originalURL, "")
 
     // описываем набор данных: метод запроса, ожидаемый код ответа, тело ответа, path запроса
     testCases := []struct {

@@ -14,7 +14,7 @@ func main() {
     store, err := storage.NewStorage(filePath, databaseDSN)
 
     if err != nil {
-        log.Fatal(fmt.Sprint(err))
+        log.Error(fmt.Sprint(err))
     }
 
     h := handler.NewHandler(store, server2, log)
