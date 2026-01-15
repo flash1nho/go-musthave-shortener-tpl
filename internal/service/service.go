@@ -22,16 +22,21 @@ import (
 )
 
 type Service struct {
-    handler *handler.Handler
-    servers []config.Server
-    log *zap.Logger
+    handler   *handler.Handler
+    servers   []config.Server
+    log       *zap.Logger
+    auditFile string
+    auditURL  string
+
 }
 
-func NewService(handler *handler.Handler, servers []config.Server, log *zap.Logger) *Service {
+func NewService(handler *handler.Handler, servers []config.Server, log *zap.Logger, auditFile string, auditURL string) *Service {
     return &Service{
         handler: handler,
         servers: servers,
         log: log,
+        auditFile: auditFile,
+        auditURL: auditURL,
     }
 }
 
@@ -42,13 +47,27 @@ func (s *Service) mainRouter() http.Handler {
     r.Use(middlewares.Decompressor)
     r.Use(middlewares.Auth)
 
-    r.Post("/", s.handler.PostURLHandler)
-    r.Post("/api/shorten", s.handler.APIShortenPostURLHandler)
-    r.Get("/{id}", s.handler.GetURLHandler)
     r.Get("/ping", s.handler.Ping)
     r.Post("/api/shorten/batch", s.handler.APIShortenBatchPostURLHandler)
     r.Get("/api/user/urls", s.handler.APIUserURLHandler)
     r.Delete("/api/user/urls", s.handler.APIUserDeleteURLHandler)
+
+    r.Group(func(r chi.Router) {
+		    subject := &middlewares.AuditSubject{}
+
+				if s.auditFile != "" {
+						subject.Register(&middlewares.FileObserver{FilePath: s.auditFile})
+				}
+
+				if s.auditURL != "" {
+						subject.Register(&middlewares.URLObserver{URL: s.auditURL})
+				}
+
+    	  r.Use(middlewares.AuditMiddleware(subject))
+		    r.Post("/", s.handler.PostURLHandler)
+		    r.Post("/api/shorten", s.handler.APIShortenPostURLHandler)
+		    r.Get("/{id}", s.handler.GetURLHandler)
+    })
 
     return r
 }
