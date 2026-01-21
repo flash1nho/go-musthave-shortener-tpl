@@ -2,6 +2,8 @@ package main
 
 import (
     "fmt"
+    "net/http"
+    _ "net/http/pprof"
 
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/storage"
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
@@ -10,6 +12,10 @@ import (
 )
 
 func main() {
+    go func() {
+        http.ListenAndServe("localhost:6060", nil)
+    }()
+
     server1, server2, log, databaseDSN, filePath, auditFile, auditURL := config.Settings()
     store, err := storage.NewStorage(filePath, databaseDSN)
 

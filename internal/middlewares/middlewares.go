@@ -89,7 +89,7 @@ func Auth(next http.Handler) http.Handler {
 
 		ctx := context.WithValue(r.Context(), CtxUserKey, userID)
 
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, r.Clone(ctx))
 	})
 }
 

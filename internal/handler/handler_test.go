@@ -8,6 +8,8 @@ import (
     "encoding/json"
     "testing"
     "context"
+    "bytes"
+    "strconv"
 
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
     "github.com/flash1nho/go-musthave-shortener-tpl/internal/storage"
@@ -216,5 +218,26 @@ func TestAPIUserURLHandler(t *testing.T) {
 
             assert.Equal(t, tc.status, w.Code, "Код ответа не совпадает с ожидаемым")
         })
+    }
+}
+
+func BenchmarkPostURLHandler(b *testing.B) {
+    h, _, shortURL := testData()
+    shortURL, _ = url.JoinPath(h.server.BaseURL, shortURL)
+    ctx := context.WithValue(context.Background(), middlewares.CtxUserKey, userID)
+
+    b.ResetTimer()
+
+    for i := 0; i < b.N; i++ {
+        b.StopTimer()
+
+        url := []byte(shortURL + strconv.Itoa(i))
+        r := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(url))
+        r = r.WithContext(ctx)
+        w := httptest.NewRecorder()
+
+        b.StartTimer()
+
+        h.PostURLHandler(w, r)
     }
 }
