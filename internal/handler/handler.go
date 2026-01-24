@@ -109,6 +109,26 @@ func (h *Handler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, URLDetails.OriginalURL, http.StatusTemporaryRedirect)
 }
 
+// APIShortenPostURLHandler - принимает в теле запроса строку URL для сокращения:
+//
+//	{"url":"<url>"}
+//
+// Возвращает ответ http.StatusCreated (201) и сокращенный URL в виде JSON:
+//
+//	{"result":"<shorten_url>"}
+//
+// @Tags shorten
+// @Summary Создает сокращенную ссылку
+// @Security Auth
+// @ID APIShortenPostURLHandler
+// @Accept  json
+// @Produce json
+// @Success 201
+// @Failure 400
+// @Failure 401
+// @Failure 409
+// @Failure 500
+// @Router /api/shorten [POST]
 func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -149,6 +169,37 @@ func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// APIShortenBatchPostURLHandler - принимает в теле запроса список строк URL для сокращения:
+//
+//	[
+//	    {
+//	        "correlation_id": "<строковый идентификатор>",
+//	        "original_url": "<URL для сокращения>"
+//	    },
+//	    ...
+//	]
+//
+// Возвращает ответ http.StatusCreated (201) и сокращенный URL в виде JSON:
+//
+//	[
+//	    {
+//	        "correlation_id": "<строковый идентификатор из объекта запроса>",
+//	        "short_url": "<shorten_url>"
+//	    },
+//	    ...
+//	]
+//
+// @Tags shorten
+// @Summary Создает несколько сокращенных ссылок
+// @Security Auth
+// @ID APIShortenBatchPostURLHandler
+// @Accept  json
+// @Produce json
+// @Success 201
+// @Failure 400
+// @Failure 401
+// @Failure 500
+// @Router /api/shorten/batch [POST]
 func (h *Handler) APIShortenBatchPostURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -240,6 +291,24 @@ func (h *Handler) APIUserURLHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// APIUserDeleteURLHandler - помечает ссылки пользователя как удаленные.
+// Формат запроса:
+//
+//	[ "a", "b", "c", "d", ...]
+//
+// Возвращает ответ http.StatusAccepted (202)
+//
+// @Tags url delete batch
+// @Summary Удаляет несколько сокращенных ссылок
+// @Security Auth
+// @ID APIUserDeleteURLHandler
+// @Accept  json
+// @Produce json
+// @Success 202
+// @Failure 400
+// @Failure 401
+// @Failure 500
+// @Router /api/user/urls [DELETE]
 func (h *Handler) APIUserDeleteURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
