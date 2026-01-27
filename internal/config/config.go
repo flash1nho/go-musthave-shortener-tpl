@@ -110,8 +110,9 @@ func Settings() (Server, Server, *zap.Logger, string, string, string, string) {
 }
 
 func ServerData(serverAddress string) Server {
+	envServerAddress, ok := os.LookupEnv("SERVER_ADDRESS")
 
-	if envServerAddress := os.Getenv("SERVER_ADDRESS"); envServerAddress != "" {
+	if ok {
 		serverAddress = envServerAddress
 	} else if serverAddress == ":0" {
 		serverAddress = DefaultHost
@@ -120,7 +121,9 @@ func ServerData(serverAddress string) Server {
 	trimmedServerAddress := strings.TrimPrefix(serverAddress, "http://")
 	serverBaseURL := "http://" + trimmedServerAddress
 
-	if envBaseURL := os.Getenv("BASE_URL"); envBaseURL != "" {
+	envBaseURL, ok := os.LookupEnv("BASE_URL")
+
+	if ok {
 		serverBaseURL = envBaseURL
 	}
 

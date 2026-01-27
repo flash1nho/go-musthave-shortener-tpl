@@ -45,4 +45,6 @@ git fetch template && git checkout template/v2 .github
 
 ## pprof
 
+С помощью утилиты `pprof` нашел место с наибольшим потреблением памяти `next.ServeHTTP(w, r.WithContext(ctx))` и заменил на `next.ServeHTTP(w, r.Clone(ctx))`.
+
 ![pprof](./profiles/result.png)

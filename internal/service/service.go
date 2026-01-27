@@ -55,11 +55,11 @@ func (s *Service) mainRouter() http.Handler {
 		subject := &middlewares.AuditSubject{}
 
 		if s.auditFile != "" {
-			subject.Register(&middlewares.FileObserver{FilePath: s.auditFile})
+			subject.Register(&middlewares.FileObserver{FilePath: s.auditFile, Log: s.log})
 		}
 
 		if s.auditURL != "" {
-			subject.Register(&middlewares.URLObserver{URL: s.auditURL})
+			subject.Register(&middlewares.URLObserver{URL: s.auditURL, Log: s.log})
 		}
 
 		r.Use(middlewares.AuditMiddleware(subject))
