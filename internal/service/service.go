@@ -1,64 +1,83 @@
 package service
 
 import (
-		"context"
-		"net/http"
-		"os"
-		"os/signal"
-		"syscall"
-		"time"
-		"fmt"
-		"slices"
-		"sync"
+	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"slices"
+	"sync"
+	"syscall"
+	"time"
 
-    "github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
-		"github.com/flash1nho/go-musthave-shortener-tpl/internal/handler"
-		"github.com/flash1nho/go-musthave-shortener-tpl/internal/middlewares"
+	"github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
+	"github.com/flash1nho/go-musthave-shortener-tpl/internal/handler"
+	"github.com/flash1nho/go-musthave-shortener-tpl/internal/middlewares"
 
-    "github.com/go-chi/chi/v5"
-    "github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/hashicorp/go-retryablehttp"
 
-    "go.uber.org/zap"
+	"go.uber.org/zap"
 )
 
 type Service struct {
-    handler *handler.Handler
-    servers []config.Server
-    log *zap.Logger
+	handler   *handler.Handler
+	servers   []config.Server
+	log       *zap.Logger
+	auditFile string
+	auditURL  string
 }
 
-func NewService(handler *handler.Handler, servers []config.Server, log *zap.Logger) *Service {
-    return &Service{
-        handler: handler,
-        servers: servers,
-        log: log,
-    }
+func NewService(handler *handler.Handler, servers []config.Server, log *zap.Logger, auditFile string, auditURL string) *Service {
+	return &Service{
+		handler:   handler,
+		servers:   servers,
+		log:       log,
+		auditFile: auditFile,
+		auditURL:  auditURL,
+	}
 }
 
 func (s *Service) mainRouter() http.Handler {
-    r := chi.NewRouter()
+	r := chi.NewRouter()
 
-    r.Use(middleware.Logger)
-    r.Use(middlewares.Decompressor)
-    r.Use(middlewares.Auth)
+	r.Use(middleware.Logger)
+	r.Use(middlewares.Decompressor)
+	r.Use(middlewares.Auth)
 
-    r.Post("/", s.handler.PostURLHandler)
-    r.Post("/api/shorten", s.handler.APIShortenPostURLHandler)
-    r.Get("/{id}", s.handler.GetURLHandler)
-    r.Get("/ping", s.handler.Ping)
-    r.Post("/api/shorten/batch", s.handler.APIShortenBatchPostURLHandler)
-    r.Get("/api/user/urls", s.handler.APIUserURLHandler)
-    r.Delete("/api/user/urls", s.handler.APIUserDeleteURLHandler)
+	r.Get("/ping", s.handler.Ping)
+	r.Post("/api/shorten/batch", s.handler.APIShortenBatchPostURLHandler)
+	r.Get("/api/user/urls", s.handler.APIUserURLHandler)
+	r.Delete("/api/user/urls", s.handler.APIUserDeleteURLHandler)
 
-    return r
+	r.Group(func(r chi.Router) {
+		subject := &middlewares.AuditSubject{}
+
+		if s.auditFile != "" {
+			subject.Register(&middlewares.FileObserver{FilePath: s.auditFile, Log: s.log})
+		}
+
+		if s.auditURL != "" {
+			subject.Register(&middlewares.URLObserver{URL: s.auditURL, Log: s.log, Client: retryablehttp.NewClient()})
+		}
+
+		r.Use(middlewares.AuditMiddleware(subject))
+		r.Post("/", s.handler.PostURLHandler)
+		r.Post("/api/shorten", s.handler.APIShortenPostURLHandler)
+		r.Get("/{id}", s.handler.GetURLHandler)
+	})
+
+	return r
 }
 
 func runServer(s *Service, ctx context.Context, wg *sync.WaitGroup, addr string) {
 	defer wg.Done()
 
 	server := &http.Server{
-		Addr: addr,
-		Handler: s.mainRouter(),
+		Addr:         addr,
+		Handler:      s.mainRouter(),
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  120 * time.Second,
@@ -92,23 +111,23 @@ func runServer(s *Service, ctx context.Context, wg *sync.WaitGroup, addr string)
 }
 
 func (s *Service) Run() {
-		var wg sync.WaitGroup
-		ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(context.Background())
 
-    for _, server := range slices.Compact(s.servers) {
-        wg.Add(1)
-        go runServer(s, ctx, &wg, server.Addr)
-    }
+	for _, server := range slices.Compact(s.servers) {
+		wg.Add(1)
+		go runServer(s, ctx, &wg, server.Addr)
+	}
 
-		signalChan := make(chan os.Signal, 1)
-		signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
 
-		sig := <-signalChan
-		s.log.Info(fmt.Sprintf("Полученный сигнал %s: инициирование завершения работы", sig))
+	sig := <-signalChan
+	s.log.Info(fmt.Sprintf("Полученный сигнал %s: инициирование завершения работы", sig))
 
-		cancel()
+	cancel()
 
-		wg.Wait()
+	wg.Wait()
 
-		s.log.Info("Все серверы успешно завершили работу.")
+	s.log.Info("Все серверы успешно завершили работу.")
 }
