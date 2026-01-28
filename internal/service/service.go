@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/hashicorp/go-retryablehttp"
 
 	"go.uber.org/zap"
 )
@@ -59,7 +60,7 @@ func (s *Service) mainRouter() http.Handler {
 		}
 
 		if s.auditURL != "" {
-			subject.Register(&middlewares.URLObserver{URL: s.auditURL, Log: s.log})
+			subject.Register(&middlewares.URLObserver{URL: s.auditURL, Log: s.log, Client: retryablehttp.NewClient()})
 		}
 
 		r.Use(middlewares.AuditMiddleware(subject))

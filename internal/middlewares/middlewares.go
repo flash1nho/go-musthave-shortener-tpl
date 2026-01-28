@@ -49,8 +49,9 @@ type FileObserver struct {
 }
 
 type URLObserver struct {
-	URL string
-	Log *zap.Logger
+	URL    string
+	Log    *zap.Logger
+	Client *retryablehttp.Client
 }
 
 func Decompressor(next http.Handler) http.Handler {
@@ -162,9 +163,6 @@ func (s *AuditSubject) NotifyAll(e AuditEvent) {
 }
 
 func (f *FileObserver) Notify(e AuditEvent) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	file, err := os.OpenFile(f.FilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 
 	if err != nil {
@@ -181,7 +179,11 @@ func (f *FileObserver) Notify(e AuditEvent) {
 		return
 	}
 
+	f.mu.Lock()
+
 	file.Write(append(data, '\n'))
+
+	f.mu.Unlock()
 }
 
 func (u *URLObserver) Notify(e AuditEvent) {
@@ -192,7 +194,7 @@ func (u *URLObserver) Notify(e AuditEvent) {
 		return
 	}
 
-	retryClient := retryablehttp.NewClient()
+	retryClient := u.Client
 	retryClient.RetryMax = 3
 	retryClient.RetryWaitMin = 1
 	retryClient.RetryWaitMax = 5
