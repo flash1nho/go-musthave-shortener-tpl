@@ -15,6 +15,9 @@
 cmd/shortener/main
 cmd/shortener/shortener
 
+# reset
+internal/handler/reset.gen.go
+
 # Dependency directories (remove the comment below to include it)
 vendor/
 

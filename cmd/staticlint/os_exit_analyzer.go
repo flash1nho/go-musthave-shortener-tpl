@@ -2,6 +2,8 @@ package main
 
 import (
 	"go/ast"
+	"go/types"
+	"strings"
 
 	"golang.org/x/tools/go/analysis"
 )
@@ -13,39 +15,46 @@ var OSExitAnalyzer = &analysis.Analyzer{
 	Run:  run,
 }
 
-func run(pass *analysis.Pass) (interface{}, error) {
-	if pass.Pkg.Name() != "main" {
-		return nil, nil
-	}
-
+func run(pass *analysis.Pass) (any, error) {
 	for _, file := range pass.Files {
-		ast.Inspect(file, func(n ast.Node) bool {
-			// Ищем функцию main
-			fn, ok := n.(*ast.FuncDecl)
-			if !ok || fn.Name.Name != "main" {
-				return true
+		for _, decl := range file.Decls {
+			fd, okFD := decl.(*ast.FuncDecl)
+			if !okFD || fd.Name.Name != "main" {
+				continue
 			}
 
-			// Ищем вызов os.Exit внутри main
-			ast.Inspect(fn.Body, func(node ast.Node) bool {
-				call, ok := node.(*ast.CallExpr)
+			filePath := pass.Fset.Position(file.Package).Filename
+			if strings.Contains(filePath, "go-build") {
+				continue
+			}
+
+			ast.Inspect(fd, func(n ast.Node) bool {
+				ce, okCE := n.(*ast.CallExpr)
+				if !okCE {
+					return true
+				}
+
+				se, okSE := ce.Fun.(*ast.SelectorExpr)
+				if !okSE {
+					return true
+				}
+
+				ident, ok := se.X.(*ast.Ident)
 				if !ok {
 					return true
 				}
 
-				selector, ok := call.Fun.(*ast.SelectorExpr)
-				if !ok {
-					return true
+				obj := pass.TypesInfo.Uses[ident]
+				if pkgName, ok := obj.(*types.PkgName); ok {
+					if pkgName.Imported().Path() == "os" && se.Sel.Name == "Exit" {
+						pass.Reportf(se.Pos(), "direct call to os.Exit in main function is prohibited")
+					}
 				}
 
-				ident, ok := selector.X.(*ast.Ident)
-				if ok && ident.Name == "os" && selector.Sel.Name == "Exit" {
-					pass.Reportf(selector.Pos(), "direct call to os.Exit in main function is prohibited")
-				}
 				return true
 			})
-			return false
-		})
+		}
 	}
+
 	return nil, nil
 }
