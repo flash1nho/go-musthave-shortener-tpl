@@ -19,33 +19,40 @@ import (
 	"go.uber.org/zap"
 )
 
+// generate:reset
 type ShortenRequest struct {
 	URL string `json:"url"`
 }
 
+// generate:reset
 type ShortenResponse struct {
 	Result string `json:"result"`
 }
 
+// generate:reset
 type BatchShortenRequest struct {
 	CorrelationID string `json:"correlation_id"`
 	OriginalURL   string `json:"original_url"`
 }
 
+// generate:reset
 type BatchShortenResponse struct {
 	CorrelationID string `json:"correlation_id"`
 	ShortURL      string `json:"short_url"`
 }
 
+// generate:reset
 type BatchUserShortenResponse struct {
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
 }
 
+// generate:reset
 type Batch struct {
 	urlMappings map[string]string
 }
 
+// generate:reset
 type Handler struct {
 	store  *storage.Storage
 	server config.Server
