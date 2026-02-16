@@ -51,7 +51,7 @@ func (addr *NetAddress) Set(s string) error {
 	return nil
 }
 
-func Settings() (Server, Server, *zap.Logger, string, string, string, string) {
+func Settings() (Server, Server, *zap.Logger, string, string, string, string, *bool) {
 	serverAddress1 := new(NetAddress)
 	_ = flag.Value(serverAddress1)
 	flag.Var(serverAddress1, "a", "значение может быть таким: "+DefaultHost+"|"+DefaultURL)
@@ -71,6 +71,8 @@ func Settings() (Server, Server, *zap.Logger, string, string, string, string) {
 
 	var auditURL string
 	flag.StringVar(&auditURL, "audit-url", "", "полный URL удаленного сервера-приёмника, куда отправляются логи аудита")
+
+	enableHTTPS := flag.Bool("s", false, "Enable HTTPS")
 
 	flag.Parse()
 
@@ -98,6 +100,12 @@ func Settings() (Server, Server, *zap.Logger, string, string, string, string) {
 		auditURL = envAuditURL
 	}
 
+	envEnableHTTPS, ok := os.LookupEnv("ENABLE_HTTPS")
+
+	if ok && envEnableHTTPS == "true" {
+		*enableHTTPS = true
+	}
+
 	logger.Initialize("info")
 
 	return ServerData(serverAddress1.String()),
@@ -106,7 +114,8 @@ func Settings() (Server, Server, *zap.Logger, string, string, string, string) {
 		databaseDSN,
 		filePath,
 		auditFile,
-		auditURL
+		auditURL,
+		enableHTTPS
 }
 
 func ServerData(serverAddress string) Server {
