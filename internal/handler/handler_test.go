@@ -67,7 +67,7 @@ func TestPostURLHandler(t *testing.T) {
 
 func TestGetURLHandler(t *testing.T) {
 	h, originalURL, shortURL := testData()
-	h.store.Set(shortURL, originalURL, "")
+	h.Store.Set(shortURL, originalURL, "")
 
 	// описываем набор данных: метод запроса, ожидаемый код ответа, тело ответа, path запроса
 	testCases := []struct {
@@ -210,7 +210,7 @@ func TestAPIUserURLHandler(t *testing.T) {
 			r = r.WithContext(ctx)
 
 			if tc.status == http.StatusOK {
-				h.store.Set(shortURL, originalURL, userID)
+				h.Store.Set(shortURL, originalURL, userID)
 			}
 
 			// вызовем хендлер как обычную функцию, без запуска самого сервера

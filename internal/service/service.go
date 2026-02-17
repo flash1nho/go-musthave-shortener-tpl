@@ -115,9 +115,15 @@ func runServer(s *Service, ctx context.Context, wg *sync.WaitGroup, addr string)
 		defer cancel()
 
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			s.log.Info(fmt.Sprintf("Ошибка завершения работы сервера http://%s: %v", server.Addr, err))
+			s.log.Error(fmt.Sprintf("Ошибка завершения работы сервера http://%s: %v", server.Addr, err))
 		} else {
 			s.log.Info(fmt.Sprintf("Сервер http://%s успешно остановлен", server.Addr))
+		}
+
+		s.log.Info("Сохранение данных в хранилище...")
+
+		if err := s.handler.Store.Close(); err != nil {
+			s.log.Error(fmt.Sprintf("Ошибка при сохранении данных: %v", err))
 		}
 	}
 }
@@ -132,7 +138,7 @@ func (s *Service) Run() {
 	}
 
 	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
 
 	sig := <-signalChan
 	s.log.Info(fmt.Sprintf("Полученный сигнал %s: инициирование завершения работы", sig))
