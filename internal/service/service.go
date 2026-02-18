@@ -2,14 +2,16 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
 	"slices"
-	"sync"
 	"syscall"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
 	"github.com/flash1nho/go-musthave-shortener-tpl/internal/handler"
@@ -23,20 +25,24 @@ import (
 )
 
 type Service struct {
-	handler   *handler.Handler
-	servers   []config.Server
-	log       *zap.Logger
-	auditFile string
-	auditURL  string
+	handler     *handler.Handler
+	servers     []config.Server
+	log         *zap.Logger
+	auditFile   string
+	auditURL    string
+	enableHTTPS bool
 }
 
-func NewService(handler *handler.Handler, servers []config.Server, log *zap.Logger, auditFile string, auditURL string) *Service {
+func NewService(handler *handler.Handler, settings config.SettingsObject) *Service {
+	servers := []config.Server{settings.Server1, settings.Server2}
+
 	return &Service{
-		handler:   handler,
-		servers:   servers,
-		log:       log,
-		auditFile: auditFile,
-		auditURL:  auditURL,
+		handler:     handler,
+		servers:     servers,
+		log:         settings.Log,
+		auditFile:   settings.AuditFile,
+		auditURL:    settings.AuditURL,
+		enableHTTPS: settings.EnableHTTPS,
 	}
 }
 
@@ -72,9 +78,7 @@ func (s *Service) mainRouter() http.Handler {
 	return r
 }
 
-func runServer(s *Service, ctx context.Context, wg *sync.WaitGroup, addr string) {
-	defer wg.Done()
-
+func runServer(ctx context.Context, s *Service, addr string) {
 	server := &http.Server{
 		Addr:         addr,
 		Handler:      s.mainRouter(),
@@ -86,10 +90,20 @@ func runServer(s *Service, ctx context.Context, wg *sync.WaitGroup, addr string)
 	serverErr := make(chan error, 1)
 
 	go func() {
-		s.log.Info(fmt.Sprintf("Сервер запущен на http://%s", server.Addr))
+		if s.enableHTTPS {
+			s.log.Info(fmt.Sprintf("Сервер запущен на https://%s", server.Addr))
+			err := server.ListenAndServeTLS("cert.pem", "key.pem")
 
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			s.log.Error(fmt.Sprintf("Ошибка запуска сервера http://%s: %v", server.Addr, err))
+			if err != nil && err != http.ErrServerClosed {
+				s.log.Error(fmt.Sprintf("Ошибка запуска сервера https://%s: %v", server.Addr, err))
+			}
+		} else {
+			s.log.Info(fmt.Sprintf("Сервер запущен на http://%s", server.Addr))
+			err := server.ListenAndServe()
+
+			if err != nil && err != http.ErrServerClosed {
+				s.log.Error(fmt.Sprintf("Ошибка запуска сервера http://%s: %v", server.Addr, err))
+			}
 		}
 	}()
 
@@ -103,31 +117,37 @@ func runServer(s *Service, ctx context.Context, wg *sync.WaitGroup, addr string)
 		defer cancel()
 
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			s.log.Info(fmt.Sprintf("Ошибка завершения работы сервера http://%s: %v", server.Addr, err))
+			s.log.Error(fmt.Sprintf("Ошибка завершения работы сервера http://%s: %v", server.Addr, err))
 		} else {
 			s.log.Info(fmt.Sprintf("Сервер http://%s успешно остановлен", server.Addr))
+		}
+
+		s.log.Info("Сохранение данных в хранилище...")
+
+		if err := s.handler.Store.Close(); err != nil {
+			s.log.Error(fmt.Sprintf("Ошибка при сохранении данных: %v", err))
 		}
 	}
 }
 
 func (s *Service) Run() {
-	var wg sync.WaitGroup
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+	defer stop()
+
+	g, ctx := errgroup.WithContext(ctx)
 
 	for _, server := range slices.Compact(s.servers) {
-		wg.Add(1)
-		go runServer(s, ctx, &wg, server.Addr)
+		srv := server
+
+		g.Go(func() error {
+			runServer(ctx, s, srv.Addr)
+			return nil
+		})
 	}
 
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
-
-	sig := <-signalChan
-	s.log.Info(fmt.Sprintf("Полученный сигнал %s: инициирование завершения работы", sig))
-
-	cancel()
-
-	wg.Wait()
+	if err := g.Wait(); err != nil && !errors.Is(err, context.Canceled) {
+		s.log.Error(fmt.Sprintf("Работа завершена с ошибкой: %v", err))
+	}
 
 	s.log.Info("Все серверы успешно завершили работу.")
 }

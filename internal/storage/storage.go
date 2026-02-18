@@ -330,6 +330,22 @@ func (s *Storage) DeleteBatch(userID string, ShortURLs []string) error {
 	return nil
 }
 
+func (s *Storage) Close() error {
+	var err error
+
+	if s.Pool != nil {
+		s.Pool.Close()
+	} else if s.filePath != "" {
+		err = s.fileSave()
+	}
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func batchUpdateWithFanIn(s *Storage, ctx context.Context, items []UpdateItem) error {
 	jobs := make(chan []UpdateItem, numWorkers)
 

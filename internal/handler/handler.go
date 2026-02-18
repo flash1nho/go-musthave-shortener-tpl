@@ -54,16 +54,16 @@ type Batch struct {
 
 // generate:reset
 type Handler struct {
-	store  *storage.Storage
+	Store  *storage.Storage
 	server config.Server
 	log    *zap.Logger
 }
 
-func NewHandler(store *storage.Storage, server config.Server, log *zap.Logger) *Handler {
+func NewHandler(store *storage.Storage, settings config.SettingsObject) *Handler {
 	return &Handler{
-		store:  store,
-		server: server,
-		log:    log,
+		Store:  store,
+		server: settings.Server2,
+		log:    settings.Log,
 	}
 }
 
@@ -87,7 +87,7 @@ func (h *Handler) PostURLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shortURL := helpers.GenerateShortURL(originalURL)
-	err = h.store.Set(shortURL, originalURL, userID)
+	err = h.Store.Set(shortURL, originalURL, userID)
 	handleStatusConflict(w, err)
 
 	fmt.Fprintf(w, "%s/%s", h.server.BaseURL, shortURL)
@@ -101,7 +101,7 @@ func (h *Handler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	URLDetails, found := h.store.Get(shortURL)
+	URLDetails, found := h.Store.Get(shortURL)
 
 	if !found {
 		http.Error(w, "Short URL not found", http.StatusBadRequest)
@@ -154,7 +154,7 @@ func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	shortURL := helpers.GenerateShortURL(req.URL)
-	err = h.store.Set(shortURL, req.URL, "")
+	err = h.Store.Set(shortURL, req.URL, "")
 	handleStatusConflict(w, err)
 
 	shortURL, _ = url.JoinPath(h.server.BaseURL, shortURL)
@@ -167,7 +167,7 @@ func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
-	if h.store.Pool == nil {
+	if h.Store.Pool == nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		h.log.Error("ошибка пинга базы данных")
 		return
@@ -250,7 +250,7 @@ func (h *Handler) APIShortenBatchPostURLHandler(w http.ResponseWriter, r *http.R
 		response = append(response, resp)
 	}
 
-	h.store.SetBatch(batch.urlMappings)
+	h.Store.SetBatch(batch.urlMappings)
 
 	w.WriteHeader(http.StatusCreated)
 
@@ -261,7 +261,7 @@ func (h *Handler) APIUserURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	userID := getUserFromContext(r.Context())
-	batch, err := h.store.GetURLsByUserID(userID)
+	batch, err := h.Store.GetURLsByUserID(userID)
 
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -331,7 +331,7 @@ func (h *Handler) APIUserDeleteURLHandler(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		err = h.store.DeleteBatch(userID, urls)
+		err = h.Store.DeleteBatch(userID, urls)
 
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)

@@ -26,15 +26,13 @@ func main() {
 		http.ListenAndServe("localhost:6060", nil)
 	}()
 
-	server1, server2, log, databaseDSN, filePath, auditFile, auditURL := config.Settings()
-	store, err := storage.NewStorage(filePath, databaseDSN)
+	settings := config.Settings()
+	store, err := storage.NewStorage(settings.FilePath, settings.DatabaseDSN)
 
 	if err != nil {
-		log.Error(fmt.Sprint(err))
+		settings.Log.Error(fmt.Sprint(err))
 	}
 
-	h := handler.NewHandler(store, server2, log)
-	servers := []config.Server{server1, server2}
-
-	service.NewService(h, servers, log, auditFile, auditURL).Run()
+	h := handler.NewHandler(store, settings)
+	service.NewService(h, settings).Run()
 }

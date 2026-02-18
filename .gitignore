@@ -27,3 +27,7 @@ vendor/
 
 # bin staticlint
 staticlint
+
+# TLS
+cert.pem
+key.pem
