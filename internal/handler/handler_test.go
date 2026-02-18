@@ -23,7 +23,9 @@ var userID, _ = middlewares.GenerateUniqueUserID()
 
 func testData() (h *Handler, originalURL string, shortURL string) {
 	store, _ := storage.NewStorage("", "")
-	h = NewHandler(store, config.ServerData(config.DefaultURL), nil)
+	server := config.Server{Addr: config.DefaultHost, BaseURL: config.DefaultURL}
+	settings := config.SettingsObject{Server1: server, Server2: server}
+	h = NewHandler(store, settings)
 	originalURL = "https://practicum.yandex.ru"
 	shortURL = helpers.GenerateShortURL(originalURL)
 

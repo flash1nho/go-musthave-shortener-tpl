@@ -59,11 +59,11 @@ type Handler struct {
 	log    *zap.Logger
 }
 
-func NewHandler(store *storage.Storage, server config.Server, log *zap.Logger) *Handler {
+func NewHandler(store *storage.Storage, settings config.SettingsObject) *Handler {
 	return &Handler{
 		Store:  store,
-		server: server,
-		log:    log,
+		server: settings.Server2,
+		log:    settings.Log,
 	}
 }
 
