@@ -25,24 +25,26 @@ import (
 )
 
 type Service struct {
-	handler     *handler.Handler
-	servers     []config.Server
-	log         *zap.Logger
-	auditFile   string
-	auditURL    string
-	enableHTTPS bool
+	handler       *handler.Handler
+	servers       []config.Server
+	log           *zap.Logger
+	auditFile     string
+	auditURL      string
+	enableHTTPS   bool
+	trustedSubnet string
 }
 
 func NewService(handler *handler.Handler, settings config.SettingsObject) *Service {
 	servers := []config.Server{settings.Server1, settings.Server2}
 
 	return &Service{
-		handler:     handler,
-		servers:     servers,
-		log:         settings.Log,
-		auditFile:   settings.AuditFile,
-		auditURL:    settings.AuditURL,
-		enableHTTPS: settings.EnableHTTPS,
+		handler:       handler,
+		servers:       servers,
+		log:           settings.Log,
+		auditFile:     settings.AuditFile,
+		auditURL:      settings.AuditURL,
+		enableHTTPS:   settings.EnableHTTPS,
+		trustedSubnet: settings.TrustedSubnet,
 	}
 }
 
@@ -69,10 +71,15 @@ func (s *Service) mainRouter() http.Handler {
 			subject.Register(&middlewares.URLObserver{URL: s.auditURL, Log: s.log, Client: retryablehttp.NewClient()})
 		}
 
-		r.Use(middlewares.AuditMiddleware(subject))
+		r.Use(middlewares.Audit(subject))
 		r.Post("/", s.handler.PostURLHandler)
 		r.Post("/api/shorten", s.handler.APIShortenPostURLHandler)
 		r.Get("/{id}", s.handler.GetURLHandler)
+	})
+
+	r.Group(func(r chi.Router) {
+		r.Use(middlewares.TrustedSubnet(s.trustedSubnet))
+		r.Get("/api/internal/stats", s.handler.APIInternalStats)
 	})
 
 	return r

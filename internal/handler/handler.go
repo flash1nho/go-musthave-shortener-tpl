@@ -342,6 +342,19 @@ func (h *Handler) APIUserDeleteURLHandler(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusAccepted)
 }
 
+func (h *Handler) APIInternalStats(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	stats, err := h.Store.GetStats()
+
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(stats)
+}
+
 func handleStatusConflict(w http.ResponseWriter, err error) {
 	if err != nil {
 		var pgErr *pgconn.PgError

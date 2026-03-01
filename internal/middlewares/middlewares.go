@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"sync"
@@ -218,7 +219,7 @@ func (u *URLObserver) Notify(e AuditEvent) {
 	resp.Body.Close()
 }
 
-func AuditMiddleware(subject *AuditSubject) func(http.Handler) http.Handler {
+func Audit(subject *AuditSubject) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			userID, _ := r.Context().Value(CtxUserKey).(string)
@@ -233,6 +234,33 @@ func AuditMiddleware(subject *AuditSubject) func(http.Handler) http.Handler {
 			}
 
 			subject.NotifyAll(event)
+		})
+	}
+}
+
+func TrustedSubnet(trustedSubnet string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if trustedSubnet == "" {
+				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+				return
+			}
+
+			_, subnet, err := net.ParseCIDR(trustedSubnet)
+			if err != nil {
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				return
+			}
+
+			ipStr := r.Header.Get("X-Real-IP")
+			ip := net.ParseIP(ipStr)
+
+			if ip == nil || !subnet.Contains(ip) {
+				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+				return
+			}
+
+			next.ServeHTTP(w, r)
 		})
 	}
 }
