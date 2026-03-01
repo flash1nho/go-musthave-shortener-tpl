@@ -3,35 +3,31 @@ package middlewares
 import (
 	"bytes"
 	"compress/gzip"
-	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/gorilla/securecookie"
 	"github.com/hashicorp/go-retryablehttp"
+
+	"github.com/flash1nho/go-musthave-shortener-tpl/internal/authenticator"
 
 	"go.uber.org/zap"
 )
-
-var hashKey = securecookie.GenerateRandomKey(32)
-var secureCookieManager = securecookie.New(hashKey, nil)
-
-const cookieName = "user_session_id"
-
-type ctxUserID string
-
-const CtxUserKey = ctxUserID("userID")
 
 type AuditEvent struct {
 	Timestamp int64  `json:"ts"`
 	Action    string `json:"action"`
 	UserID    string `json:"user_id"`
 	URL       string `json:"url"`
+}
+
+type httpProvider struct {
+	w http.ResponseWriter
+	r *http.Request
 }
 
 type Observer interface {
@@ -70,86 +66,6 @@ func Decompressor(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
-}
-
-func Auth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie(cookieName)
-
-		var userID string
-
-		if err != nil {
-			userID, err = setSignedCookie(w)
-
-			if err != nil {
-				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-				return
-			}
-		}
-
-		if userID == "" {
-			userID, err = getUserIDFromCookie(w, cookie.Value)
-
-			if err != nil {
-				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-				return
-			}
-		}
-
-		ctx := context.WithValue(r.Context(), CtxUserKey, userID)
-
-		next.ServeHTTP(w, r.Clone(ctx))
-	})
-}
-
-func getUserIDFromCookie(w http.ResponseWriter, cookieValue string) (string, error) {
-	var userID string
-
-	err := secureCookieManager.Decode(cookieName, cookieValue, &userID)
-
-	if err != nil {
-		return "", err
-	}
-
-	return userID, nil
-}
-
-func setSignedCookie(w http.ResponseWriter) (string, error) {
-	userID, err := GenerateUniqueUserID()
-
-	if err != nil {
-		return "", err
-	}
-
-	encodedValue, err := secureCookieManager.Encode(cookieName, userID)
-
-	if err != nil {
-		return "", err
-	}
-
-	cookie := &http.Cookie{
-		Name:     cookieName,
-		Value:    encodedValue,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   false,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   3600 * 24 * 7,
-	}
-
-	http.SetCookie(w, cookie)
-
-	return userID, nil
-}
-
-func GenerateUniqueUserID() (string, error) {
-	id, err := uuid.NewRandom()
-
-	if err != nil {
-		return "", fmt.Errorf("не удалось сгенерировать UUID: %w", err)
-	}
-
-	return id.String(), nil
 }
 
 func (s *AuditSubject) Register(o Observer) {
@@ -218,10 +134,10 @@ func (u *URLObserver) Notify(e AuditEvent) {
 	resp.Body.Close()
 }
 
-func AuditMiddleware(subject *AuditSubject) func(http.Handler) http.Handler {
+func Audit(subject *AuditSubject) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			userID, _ := r.Context().Value(CtxUserKey).(string)
+			userID, _ := r.Context().Value(authenticator.CtxUserKey).(string)
 
 			next.ServeHTTP(w, r)
 
@@ -235,4 +151,70 @@ func AuditMiddleware(subject *AuditSubject) func(http.Handler) http.Handler {
 			subject.NotifyAll(event)
 		})
 	}
+}
+
+func TrustedSubnet(trustedSubnet string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if trustedSubnet == "" {
+				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+				return
+			}
+
+			_, subnet, err := net.ParseCIDR(trustedSubnet)
+			if err != nil {
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				return
+			}
+
+			ipStr := r.Header.Get("X-Real-IP")
+			ip := net.ParseIP(ipStr)
+
+			if ip == nil || !subnet.Contains(ip) {
+				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func (p *httpProvider) GetCookie(cookieName string) (string, error) {
+	cookie, err := p.r.Cookie(cookieName)
+
+	if err != nil {
+		return "", err
+	}
+
+	return cookie.Value, nil
+}
+
+func (p *httpProvider) SetCookie(cookieName, cookieValue string) error {
+	cookie := &http.Cookie{
+		Name:     cookieName,
+		Value:    cookieValue,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   3600 * 24 * 7,
+	}
+
+	http.SetCookie(p.w, cookie)
+
+	return nil
+}
+
+func Auth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx, err := authenticator.Authenticate(r.Context(), &httpProvider{w, r})
+
+		if err != nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r.Clone(ctx))
+	})
 }

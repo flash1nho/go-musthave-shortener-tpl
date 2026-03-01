@@ -48,6 +48,11 @@ type UpdateResult struct {
 	Updated  bool
 }
 
+type Stats struct {
+	URLs  int `json:"urls"`
+	Users int `json:"users"`
+}
+
 const numWorkers = 4
 
 func NewStorage(filePath string, databaseDSN string) (*Storage, error) {
@@ -344,6 +349,24 @@ func (s *Storage) Close() error {
 	}
 
 	return nil
+}
+
+func (s *Storage) GetStats() (*Stats, error) {
+	var urlsCount int
+	err := s.Pool.QueryRow(context.TODO(), "SELECT COUNT(*) FROM shorten_urls").Scan(&urlsCount)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var usersCount int
+	err = s.Pool.QueryRow(context.TODO(), "SELECT COUNT(*) FROM users").Scan(&usersCount)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &Stats{URLs: urlsCount, Users: usersCount}, nil
 }
 
 func batchUpdateWithFanIn(s *Storage, ctx context.Context, items []UpdateItem) error {

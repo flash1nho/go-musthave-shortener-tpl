@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,9 +9,8 @@ import (
 	"net/url"
 
 	"github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
+	"github.com/flash1nho/go-musthave-shortener-tpl/internal/facade"
 	"github.com/flash1nho/go-musthave-shortener-tpl/internal/helpers"
-	"github.com/flash1nho/go-musthave-shortener-tpl/internal/middlewares"
-	"github.com/flash1nho/go-musthave-shortener-tpl/internal/storage"
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -42,33 +40,25 @@ type BatchShortenResponse struct {
 }
 
 // generate:reset
-type BatchUserShortenResponse struct {
-	ShortURL    string `json:"short_url"`
-	OriginalURL string `json:"original_url"`
-}
-
-// generate:reset
 type Batch struct {
 	urlMappings map[string]string
 }
 
 // generate:reset
 type Handler struct {
-	Store  *storage.Storage
-	server config.Server
+	Facade *facade.Facade
 	log    *zap.Logger
 }
 
-func NewHandler(store *storage.Storage, settings config.SettingsObject) *Handler {
+func NewHandler(facade *facade.Facade, settings config.SettingsObject) *Handler {
 	return &Handler{
-		Store:  store,
-		server: settings.Server2,
+		Facade: facade,
 		log:    settings.Log,
 	}
 }
 
 func (h *Handler) PostURLHandler(w http.ResponseWriter, r *http.Request) {
-	userID := getUserFromContext(r.Context())
+	userID := h.Facade.GetUserFromContext(r.Context())
 
 	body, err := io.ReadAll(r.Body)
 
@@ -86,11 +76,10 @@ func (h *Handler) PostURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shortURL := helpers.GenerateShortURL(originalURL)
-	err = h.Store.Set(shortURL, originalURL, userID)
+	result, err := h.Facade.PostURLFacade(userID, originalURL)
 	handleStatusConflict(w, err)
 
-	fmt.Fprintf(w, "%s/%s", h.server.BaseURL, shortURL)
+	fmt.Fprintln(w, result)
 }
 
 func (h *Handler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
@@ -101,10 +90,10 @@ func (h *Handler) GetURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	URLDetails, found := h.Store.Get(shortURL)
+	URLDetails, err := h.Facade.GetURLFacade(shortURL)
 
-	if !found {
-		http.Error(w, "Short URL not found", http.StatusBadRequest)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -154,10 +143,10 @@ func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	shortURL := helpers.GenerateShortURL(req.URL)
-	err = h.Store.Set(shortURL, req.URL, "")
+	err = h.Facade.Store.Set(shortURL, req.URL, "")
 	handleStatusConflict(w, err)
 
-	shortURL, _ = url.JoinPath(h.server.BaseURL, shortURL)
+	shortURL, _ = url.JoinPath(h.Facade.BaseURL, shortURL)
 
 	response := ShortenResponse{
 		Result: shortURL,
@@ -167,7 +156,7 @@ func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
-	if h.Store.Pool == nil {
+	if h.Facade.Store.Pool == nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		h.log.Error("ошибка пинга базы данных")
 		return
@@ -232,7 +221,7 @@ func (h *Handler) APIShortenBatchPostURLHandler(w http.ResponseWriter, r *http.R
 
 	for _, item := range req {
 		sURL := helpers.GenerateShortURL(item.OriginalURL)
-		shortURL, err := url.JoinPath(h.server.BaseURL, sURL)
+		shortURL, err := url.JoinPath(h.Facade.BaseURL, sURL)
 
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -250,7 +239,7 @@ func (h *Handler) APIShortenBatchPostURLHandler(w http.ResponseWriter, r *http.R
 		response = append(response, resp)
 	}
 
-	h.Store.SetBatch(batch.urlMappings)
+	h.Facade.Store.SetBatch(batch.urlMappings)
 
 	w.WriteHeader(http.StatusCreated)
 
@@ -260,8 +249,8 @@ func (h *Handler) APIShortenBatchPostURLHandler(w http.ResponseWriter, r *http.R
 func (h *Handler) APIUserURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	userID := getUserFromContext(r.Context())
-	batch, err := h.Store.GetURLsByUserID(userID)
+	userID := h.Facade.GetUserFromContext(r.Context())
+	result, err := h.Facade.APIUserURLFacade(userID)
 
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -269,33 +258,14 @@ func (h *Handler) APIUserURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(batch) == 0 {
+	if len(result) == 0 {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
-	var response []BatchUserShortenResponse
-
-	for _, item := range batch {
-		shortURL, err := url.JoinPath(h.server.BaseURL, item.ShortURL)
-
-		if err != nil {
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			h.log.Error(fmt.Sprintf("Ошибка батчинга: %v", err))
-			return
-		}
-
-		resp := BatchUserShortenResponse{
-			ShortURL:    shortURL,
-			OriginalURL: item.OriginalURL,
-		}
-
-		response = append(response, resp)
-	}
-
 	w.WriteHeader(http.StatusOK)
 
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(result)
 }
 
 // APIUserDeleteURLHandler - помечает ссылки пользователя как удаленные.
@@ -319,7 +289,7 @@ func (h *Handler) APIUserURLHandler(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) APIUserDeleteURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	userID := getUserFromContext(r.Context())
+	userID := h.Facade.GetUserFromContext(r.Context())
 
 	if userID != "" {
 		var urls []string
@@ -331,7 +301,7 @@ func (h *Handler) APIUserDeleteURLHandler(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		err = h.Store.DeleteBatch(userID, urls)
+		err = h.Facade.Store.DeleteBatch(userID, urls)
 
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -340,6 +310,19 @@ func (h *Handler) APIUserDeleteURLHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	w.WriteHeader(http.StatusAccepted)
+}
+
+func (h *Handler) APIInternalStats(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	stats, err := h.Facade.Store.GetStats()
+
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(stats)
 }
 
 func handleStatusConflict(w http.ResponseWriter, err error) {
@@ -355,14 +338,4 @@ func handleStatusConflict(w http.ResponseWriter, err error) {
 	} else {
 		w.WriteHeader(http.StatusCreated)
 	}
-}
-
-func getUserFromContext(ctx context.Context) string {
-	userID, ok := ctx.Value(middlewares.CtxUserKey).(string)
-
-	if !ok {
-		return ""
-	}
-
-	return userID
 }
