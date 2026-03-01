@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,6 +13,10 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+
+	pb "github.com/flash1nho/go-musthave-shortener-tpl/internal/grpc"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
 	"github.com/flash1nho/go-musthave-shortener-tpl/internal/handler"
@@ -26,6 +31,7 @@ import (
 
 type Service struct {
 	handler       *handler.Handler
+	gHandler      *pb.GrpcHandler
 	servers       []config.Server
 	log           *zap.Logger
 	auditFile     string
@@ -34,11 +40,12 @@ type Service struct {
 	trustedSubnet string
 }
 
-func NewService(handler *handler.Handler, settings config.SettingsObject) *Service {
+func NewService(handler *handler.Handler, gHandler *pb.GrpcHandler, settings config.SettingsObject) *Service {
 	servers := []config.Server{settings.Server1, settings.Server2}
 
 	return &Service{
 		handler:       handler,
+		gHandler:      gHandler,
 		servers:       servers,
 		log:           settings.Log,
 		auditFile:     settings.AuditFile,
@@ -128,12 +135,42 @@ func runServer(ctx context.Context, s *Service, addr string) {
 		} else {
 			s.log.Info(fmt.Sprintf("Сервер http://%s успешно остановлен", server.Addr))
 		}
+	}
+}
 
-		s.log.Info("Сохранение данных в хранилище...")
+func runGrpcServer(ctx context.Context, s *Service) {
+	serverErr := make(chan error, 1)
+	creds := insecure.NewCredentials()
+	grpcServer := grpc.NewServer(
+		grpc.Creds(creds),
+		grpc.UnaryInterceptor(pb.Auth),
+	)
 
-		if err := s.handler.Store.Close(); err != nil {
-			s.log.Error(fmt.Sprintf("Ошибка при сохранении данных: %v", err))
+	go func() {
+		listen, err := net.Listen("tcp", ":3200")
+
+		if err == nil {
+			pb.RegisterShortenerServiceServer(grpcServer, s.gHandler)
+
+			s.log.Info("сервер gRPC начал работу")
+
+			if err := grpcServer.Serve(listen); err != nil {
+				s.log.Error(fmt.Sprintf("Ошибка при работе gRPC сервера: %v", err))
+			}
+		} else {
+			s.log.Error(fmt.Sprintf("Ошибка при инициализации gRPC listener: %v", err))
 		}
+	}()
+
+	select {
+	case err := <-serverErr:
+		s.log.Info(fmt.Sprint(err))
+	case <-ctx.Done():
+		s.log.Info("Завершение работы gRPC сервера")
+
+		grpcServer.GracefulStop()
+
+		s.log.Info("gRPC сервер успешно остановлен")
 	}
 }
 
@@ -152,8 +189,19 @@ func (s *Service) Run() {
 		})
 	}
 
+	g.Go(func() error {
+		runGrpcServer(ctx, s)
+		return nil
+	})
+
 	if err := g.Wait(); err != nil && !errors.Is(err, context.Canceled) {
 		s.log.Error(fmt.Sprintf("Работа завершена с ошибкой: %v", err))
+	}
+
+	s.log.Info("Сохранение данных в хранилище...")
+
+	if err := s.handler.Facade.Store.Close(); err != nil {
+		s.log.Error(fmt.Sprintf("Ошибка при сохранении данных: %v", err))
 	}
 
 	s.log.Info("Все серверы успешно завершили работу.")
