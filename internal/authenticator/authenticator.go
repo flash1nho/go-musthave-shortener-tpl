@@ -8,62 +8,103 @@ import (
 	"github.com/gorilla/securecookie"
 )
 
-var hashKey = securecookie.GenerateRandomKey(32)
-var secureCookieManager = securecookie.New(hashKey, nil)
-
 const cookieName = "user_session_id"
 
-type ctxUserID string
+type UserID string
 
-const CtxUserKey = ctxUserID("userID")
+const userKey = UserID("userID")
 
-type AuthProvider interface {
-	GetCookie(name string) (string, error)
-	SetCookie(name, value string) error
+type Authenticator struct {
+	cookieManager *securecookie.SecureCookie
 }
 
-func Authenticate(ctx context.Context, p AuthProvider) (context.Context, error) {
+type CookieData struct {
+	userID      string
+	cookieValue string
+}
+
+func NewAuthenticator() *Authenticator {
+	return &Authenticator{
+		cookieManager: securecookie.New(securecookie.GenerateRandomKey(32), nil),
+	}
+}
+
+type AuthProvider interface {
+	GetCookie(ctx context.Context, name string) (string, error)
+	SetCookie(ctx context.Context, name string, value string) error
+}
+
+func FromContext(ctx context.Context) (string, error) {
+	userID, ok := ctx.Value(userKey).(string)
+
+	if !ok {
+		return "", fmt.Errorf("userID не найден в контексте")
+	}
+
+	return userID, nil
+}
+
+func GetUserKey() UserID {
+	return userKey
+}
+
+func (a *Authenticator) Authenticate(ctx context.Context, p AuthProvider) (context.Context, error) {
 	var cookieValue string
 
-	cookieValue, err := p.GetCookie(cookieName)
+	cookieValue, err := p.GetCookie(ctx, cookieName)
 
 	var userID string
 
 	if err != nil {
-		userID, cookieValue, err = setSignedCookie()
+		cookieData, err := a.createSignedCookie()
 
 		if err != nil {
 			return nil, err
 		}
-	}
 
-	p.SetCookie(cookieName, cookieValue)
+		userID = cookieData.userID
+		cookieValue = cookieData.cookieValue
+	}
 
 	if userID == "" {
-		userID, err = getUserIDFromCookie(cookieValue)
+		userID, err = a.getUserIDFromCookie(cookieValue)
 
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return context.WithValue(ctx, CtxUserKey, userID), nil
+	p.SetCookie(ctx, cookieName, cookieValue)
+
+	return context.WithValue(ctx, userKey, userID), nil
 }
 
-func setSignedCookie() (string, string, error) {
+func (a *Authenticator) createSignedCookie() (*CookieData, error) {
 	userID, err := GenerateUniqueUserID()
 
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 
-	encodedValue, err := secureCookieManager.Encode(cookieName, userID)
+	cookieValue, err := a.cookieManager.Encode(cookieName, userID)
 
 	if err != nil {
-		return "", "", err
+		return nil, fmt.Errorf("ошибка кодирования cookie: %w", err)
 	}
 
-	return userID, encodedValue, nil
+	return &CookieData{userID: userID, cookieValue: cookieValue}, nil
+}
+
+func (a *Authenticator) getUserIDFromCookie(cookieValue string) (string, error) {
+	var userID string
+
+	err := a.cookieManager.Decode(cookieName, cookieValue, &userID)
+
+	if err != nil {
+		return "", fmt.Errorf("ошибка декодирования cookie: %w", err)
+	}
+
+	return userID, nil
 }
 
 func GenerateUniqueUserID() (string, error) {
@@ -74,16 +115,4 @@ func GenerateUniqueUserID() (string, error) {
 	}
 
 	return id.String(), nil
-}
-
-func getUserIDFromCookie(cookieValue string) (string, error) {
-	var userID string
-
-	err := secureCookieManager.Decode(cookieName, cookieValue, &userID)
-
-	if err != nil {
-		return "", err
-	}
-
-	return userID, nil
 }

@@ -109,21 +109,21 @@ func runServer(ctx context.Context, s *Service, addr string) {
 			err := server.ListenAndServeTLS("cert.pem", "key.pem")
 
 			if err != nil && err != http.ErrServerClosed {
-				s.log.Error(fmt.Sprintf("Ошибка запуска сервера https://%s: %v", server.Addr, err))
+				s.log.Error("Ошибка запуска сервера", zap.String("https://", server.Addr), zap.Error(err))
 			}
 		} else {
 			s.log.Info(fmt.Sprintf("Сервер запущен на http://%s", server.Addr))
 			err := server.ListenAndServe()
 
 			if err != nil && err != http.ErrServerClosed {
-				s.log.Error(fmt.Sprintf("Ошибка запуска сервера http://%s: %v", server.Addr, err))
+				s.log.Error("Ошибка запуска сервера", zap.String("http://", server.Addr), zap.Error(err))
 			}
 		}
 	}()
 
 	select {
 	case err := <-serverErr:
-		s.log.Info(fmt.Sprint(err))
+		s.log.Error(err.Error())
 	case <-ctx.Done():
 		s.log.Info(fmt.Sprintf("Завершение работы сервера http://%s", server.Addr))
 
@@ -131,7 +131,7 @@ func runServer(ctx context.Context, s *Service, addr string) {
 		defer cancel()
 
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			s.log.Error(fmt.Sprintf("Ошибка завершения работы сервера http://%s: %v", server.Addr, err))
+			s.log.Error("Ошибка завершения работы сервера", zap.String("https://", server.Addr), zap.Error(err))
 		} else {
 			s.log.Info(fmt.Sprintf("Сервер http://%s успешно остановлен", server.Addr))
 		}
@@ -155,16 +155,16 @@ func runGrpcServer(ctx context.Context, s *Service) {
 			s.log.Info("сервер gRPC начал работу")
 
 			if err := grpcServer.Serve(listen); err != nil {
-				s.log.Error(fmt.Sprintf("Ошибка при работе gRPC сервера: %v", err))
+				s.log.Error("Ошибка при работе gRPC сервера", zap.Error(err))
 			}
 		} else {
-			s.log.Error(fmt.Sprintf("Ошибка при инициализации gRPC listener: %v", err))
+			s.log.Error("Ошибка при инициализации gRPC listener", zap.Error(err))
 		}
 	}()
 
 	select {
 	case err := <-serverErr:
-		s.log.Info(fmt.Sprint(err))
+		s.log.Error(err.Error())
 	case <-ctx.Done():
 		s.log.Info("Завершение работы gRPC сервера")
 
@@ -195,13 +195,13 @@ func (s *Service) Run() {
 	})
 
 	if err := g.Wait(); err != nil && !errors.Is(err, context.Canceled) {
-		s.log.Error(fmt.Sprintf("Работа завершена с ошибкой: %v", err))
+		s.log.Error("Работа завершена с ошибкой", zap.Error(err))
 	}
 
 	s.log.Info("Сохранение данных в хранилище...")
 
 	if err := s.handler.Facade.Store.Close(); err != nil {
-		s.log.Error(fmt.Sprintf("Ошибка при сохранении данных: %v", err))
+		s.log.Error("Ошибка при сохранении данных", zap.Error(err))
 	}
 
 	s.log.Info("Все серверы успешно завершили работу.")

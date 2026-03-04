@@ -8,13 +8,14 @@ import (
 )
 
 func Connect(databaseDSN string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(context.Background(), databaseDSN)
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, databaseDSN)
 
 	if err != nil {
 		return nil, fmt.Errorf("ошибка подключения к базе данных: %w", err)
 	}
 
-	err = pool.Ping(context.TODO())
+	err = pool.Ping(ctx)
 
 	if err != nil {
 		return nil, fmt.Errorf("ошибка пинга базы данных: %w", err)

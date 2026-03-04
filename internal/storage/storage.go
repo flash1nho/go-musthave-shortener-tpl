@@ -84,7 +84,7 @@ func NewStorage(filePath string, databaseDSN string) (*Storage, error) {
 	}
 
 	if s.Pool != nil {
-		err = s.dbLoad()
+		err = s.dbLoad(context.Background())
 
 		if err != nil && !os.IsNotExist(err) {
 			return nil, err
@@ -133,11 +133,11 @@ func (s *Storage) fileLoad() error {
 	return nil
 }
 
-func (s *Storage) dbLoad() error {
+func (s *Storage) dbLoad(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	rows, err := s.Pool.Query(context.TODO(), "SELECT original_url, short_url FROM shorten_urls WHERE is_deleted = FALSE")
+	rows, err := s.Pool.Query(ctx, "SELECT original_url, short_url FROM shorten_urls WHERE is_deleted = FALSE")
 
 	if err != nil {
 		return err
@@ -163,14 +163,14 @@ func (s *Storage) dbLoad() error {
 	return nil
 }
 
-func (s *Storage) save(key string, value string, userID string) error {
+func (s *Storage) save(ctx context.Context, key string, value string, userID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	var err error
 
 	if s.Pool != nil {
-		err = s.dbSave(value, key, userID)
+		err = s.dbSave(ctx, value, key, userID)
 	} else if s.filePath != "" {
 		err = s.fileSave()
 	}
@@ -208,9 +208,9 @@ func (s *Storage) fileSave() error {
 	return nil
 }
 
-func (s *Storage) dbSave(originalURL string, shortURL string, userID string) error {
+func (s *Storage) dbSave(ctx context.Context, originalURL string, shortURL string, userID string) error {
 	insertSQL := `INSERT INTO shorten_urls (original_url, short_url, user_id) VALUES ($1, $2, $3)`
-	_, err := s.Pool.Exec(context.TODO(), insertSQL, originalURL, shortURL, userID)
+	_, err := s.Pool.Exec(ctx, insertSQL, originalURL, shortURL, userID)
 
 	if err != nil {
 		return err
@@ -219,7 +219,7 @@ func (s *Storage) dbSave(originalURL string, shortURL string, userID string) err
 	return nil
 }
 
-func (s *Storage) dbSaveBatch(batch map[string]string) error {
+func (s *Storage) dbSaveBatch(ctx context.Context, batch map[string]string) error {
 	if s.Pool == nil {
 		return nil
 	}
@@ -230,7 +230,7 @@ func (s *Storage) dbSaveBatch(batch map[string]string) error {
 		pb.Queue(`INSERT INTO shorten_urls (original_url, short_url) VALUES ($1, $2)`, originalURL, shortURL)
 	}
 
-	results := s.Pool.SendBatch(context.TODO(), pb)
+	results := s.Pool.SendBatch(ctx, pb)
 	defer results.Close()
 
 	for i := 0; i < len(batch); i++ {
@@ -244,15 +244,15 @@ func (s *Storage) dbSaveBatch(batch map[string]string) error {
 	return nil
 }
 
-func (s *Storage) Set(key string, value string, userID string) error {
+func (s *Storage) Set(ctx context.Context, key string, value string, userID string) error {
 	s.mu.Lock()
 	s.urlMappings[key] = URLDetails{OriginalURL: value, UserID: userID, IsDeleted: false}
 	s.mu.Unlock()
 
-	return s.save(key, value, userID)
+	return s.save(ctx, key, value, userID)
 }
 
-func (s *Storage) SetBatch(batch map[string]string) error {
+func (s *Storage) SetBatch(ctx context.Context, batch map[string]string) error {
 	s.mu.Lock()
 
 	for shortURL, originalURL := range batch {
@@ -261,7 +261,7 @@ func (s *Storage) SetBatch(batch map[string]string) error {
 
 	s.mu.Unlock()
 
-	return s.dbSaveBatch(batch)
+	return s.dbSaveBatch(ctx, batch)
 }
 
 func (s *Storage) Get(key string) (URLDetails, bool) {
@@ -272,7 +272,7 @@ func (s *Storage) Get(key string) (URLDetails, bool) {
 	return value, found
 }
 
-func (s *Storage) GetURLsByUserID(userID string) ([]URLDetails, error) {
+func (s *Storage) GetURLsByUserID(ctx context.Context, userID string) ([]URLDetails, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -280,7 +280,7 @@ func (s *Storage) GetURLsByUserID(userID string) ([]URLDetails, error) {
 
 	if s.Pool != nil {
 		query := `SELECT original_url, short_url FROM shorten_urls WHERE user_id = $1 AND is_deleted = FALSE`
-		rows, err := s.Pool.Query(context.TODO(), query, userID)
+		rows, err := s.Pool.Query(ctx, query, userID)
 
 		if err != nil {
 			return nil, err
@@ -314,7 +314,7 @@ func (s *Storage) GetURLsByUserID(userID string) ([]URLDetails, error) {
 	return batch, nil
 }
 
-func (s *Storage) DeleteBatch(userID string, ShortURLs []string) error {
+func (s *Storage) DeleteBatch(ctx context.Context, userID string, ShortURLs []string) error {
 	var items []UpdateItem
 
 	for i := 0; i < len(ShortURLs); i++ {
@@ -326,7 +326,7 @@ func (s *Storage) DeleteBatch(userID string, ShortURLs []string) error {
 		items = append(items, item)
 	}
 
-	err := batchUpdateWithFanIn(s, context.TODO(), items)
+	err := batchUpdateWithFanIn(s, ctx, items)
 
 	if err != nil {
 		return err
@@ -351,16 +351,16 @@ func (s *Storage) Close() error {
 	return nil
 }
 
-func (s *Storage) GetStats() (*Stats, error) {
+func (s *Storage) GetStats(ctx context.Context) (*Stats, error) {
 	var urlsCount int
-	err := s.Pool.QueryRow(context.TODO(), "SELECT COUNT(*) FROM shorten_urls").Scan(&urlsCount)
+	err := s.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM shorten_urls").Scan(&urlsCount)
 
 	if err != nil {
 		return nil, err
 	}
 
 	var usersCount int
-	err = s.Pool.QueryRow(context.TODO(), "SELECT COUNT(*) FROM users").Scan(&usersCount)
+	err = s.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM users").Scan(&usersCount)
 
 	if err != nil {
 		return nil, err

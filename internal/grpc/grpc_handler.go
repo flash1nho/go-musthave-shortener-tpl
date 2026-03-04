@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/flash1nho/go-musthave-shortener-tpl/internal/facade"
-	"github.com/golang/protobuf/ptypes/empty"
 )
 
 type GrpcHandler struct {
@@ -22,8 +21,13 @@ func NewHandler(facade *facade.Facade) *GrpcHandler {
 func (g *GrpcHandler) ShortenURL(ctx context.Context, req *URLShortenRequest) (*URLShortenResponse, error) {
 	var response URLShortenResponse
 
-	userID := g.facade.GetUserFromContext(ctx)
-	result, err := g.facade.PostURLFacade(userID, req.URL)
+	userID, err := g.facade.GetUserFromContext(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := g.facade.PostURLFacade(ctx, userID, req.URL)
 
 	if err != nil {
 		return nil, err
@@ -48,11 +52,16 @@ func (g *GrpcHandler) ExpandURL(ctx context.Context, req *URLExpandRequest) (*UR
 	return &response, nil
 }
 
-func (g *GrpcHandler) ListUserURLs(ctx context.Context, _ *empty.Empty) (*UserURLsResponse, error) {
+func (g *GrpcHandler) ListUserURLs(ctx context.Context, req *UserURLsRequest) (*UserURLsResponse, error) {
 	var response UserURLsResponse
 
-	userID := g.facade.GetUserFromContext(ctx)
-	result, err := g.facade.APIUserURLFacade(userID)
+	userID, err := g.facade.GetUserFromContext(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := g.facade.APIUserURLFacade(ctx, userID)
 
 	if err != nil {
 		return nil, err
@@ -67,7 +76,7 @@ func (g *GrpcHandler) ListUserURLs(ctx context.Context, _ *empty.Empty) (*UserUR
 		})
 	}
 
-	response.URL = &grpcURLs
+	response.URLs = &grpcURLs
 
 	return &response, nil
 }

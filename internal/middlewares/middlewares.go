@@ -3,6 +3,7 @@ package middlewares
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -25,7 +26,7 @@ type AuditEvent struct {
 	URL       string `json:"url"`
 }
 
-type httpProvider struct {
+type HTTPProvider struct {
 	w http.ResponseWriter
 	r *http.Request
 }
@@ -137,7 +138,7 @@ func (u *URLObserver) Notify(e AuditEvent) {
 func Audit(subject *AuditSubject) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			userID, _ := r.Context().Value(authenticator.CtxUserKey).(string)
+			userID, _ := r.Context().Value(authenticator.GetUserKey()).(string)
 
 			next.ServeHTTP(w, r)
 
@@ -157,7 +158,7 @@ func TrustedSubnet(trustedSubnet string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if trustedSubnet == "" {
-				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+				next.ServeHTTP(w, r)
 				return
 			}
 
@@ -180,7 +181,7 @@ func TrustedSubnet(trustedSubnet string) func(http.Handler) http.Handler {
 	}
 }
 
-func (p *httpProvider) GetCookie(cookieName string) (string, error) {
+func (p *HTTPProvider) GetCookie(_ context.Context, cookieName string) (string, error) {
 	cookie, err := p.r.Cookie(cookieName)
 
 	if err != nil {
@@ -190,7 +191,7 @@ func (p *httpProvider) GetCookie(cookieName string) (string, error) {
 	return cookie.Value, nil
 }
 
-func (p *httpProvider) SetCookie(cookieName, cookieValue string) error {
+func (p *HTTPProvider) SetCookie(_ context.Context, cookieName, cookieValue string) error {
 	cookie := &http.Cookie{
 		Name:     cookieName,
 		Value:    cookieValue,
@@ -208,7 +209,8 @@ func (p *httpProvider) SetCookie(cookieName, cookieValue string) error {
 
 func Auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, err := authenticator.Authenticate(r.Context(), &httpProvider{w, r})
+		auth := authenticator.NewAuthenticator()
+		ctx, err := auth.Authenticate(r.Context(), &HTTPProvider{w, r})
 
 		if err != nil {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)

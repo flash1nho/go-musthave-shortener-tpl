@@ -11,14 +11,12 @@ import (
 	"github.com/flash1nho/go-musthave-shortener-tpl/internal/authenticator"
 )
 
-type grpcProvider struct {
-	ctx context.Context
-}
+type grpcProvider struct{}
 
-func (p *grpcProvider) GetCookie(_ string) (string, error) {
+func (p *grpcProvider) GetCookie(ctx context.Context, _ string) (string, error) {
 	var cookie string
 
-	if md, ok := metadata.FromIncomingContext(p.ctx); ok {
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
 		values := md.Get("authorization")
 
 		if len(values) > 0 {
@@ -29,17 +27,18 @@ func (p *grpcProvider) GetCookie(_ string) (string, error) {
 	return cookie, nil
 }
 
-func (p *grpcProvider) SetCookie(cookieName, cookieValue string) error {
+func (p *grpcProvider) SetCookie(ctx context.Context, cookieName, cookieValue string) error {
 	header := metadata.Pairs("set-cookie", cookieName+"="+cookieValue+"; Path=/")
-	return grpc.SendHeader(p.ctx, header)
+	return grpc.SendHeader(ctx, header)
 }
 
 func Auth(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-	newCtx, err := authenticator.Authenticate(ctx, &grpcProvider{ctx})
+	auth := authenticator.NewAuthenticator()
+	ctx, err := auth.Authenticate(ctx, &grpcProvider{})
 
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, err.Error())
 	}
 
-	return handler(newCtx, req)
+	return handler(ctx, req)
 }

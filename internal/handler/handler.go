@@ -58,7 +58,12 @@ func NewHandler(facade *facade.Facade, settings config.SettingsObject) *Handler 
 }
 
 func (h *Handler) PostURLHandler(w http.ResponseWriter, r *http.Request) {
-	userID := h.Facade.GetUserFromContext(r.Context())
+	userID, err := h.Facade.GetUserFromContext(r.Context())
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	body, err := io.ReadAll(r.Body)
 
@@ -76,7 +81,7 @@ func (h *Handler) PostURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.Facade.PostURLFacade(userID, originalURL)
+	result, err := h.Facade.PostURLFacade(r.Context(), userID, originalURL)
 	handleStatusConflict(w, err)
 
 	fmt.Fprintln(w, result)
@@ -143,7 +148,7 @@ func (h *Handler) APIShortenPostURLHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	shortURL := helpers.GenerateShortURL(req.URL)
-	err = h.Facade.Store.Set(shortURL, req.URL, "")
+	err = h.Facade.Store.Set(r.Context(), shortURL, req.URL, "")
 	handleStatusConflict(w, err)
 
 	shortURL, _ = url.JoinPath(h.Facade.BaseURL, shortURL)
@@ -239,7 +244,7 @@ func (h *Handler) APIShortenBatchPostURLHandler(w http.ResponseWriter, r *http.R
 		response = append(response, resp)
 	}
 
-	h.Facade.Store.SetBatch(batch.urlMappings)
+	h.Facade.Store.SetBatch(r.Context(), batch.urlMappings)
 
 	w.WriteHeader(http.StatusCreated)
 
@@ -249,8 +254,15 @@ func (h *Handler) APIShortenBatchPostURLHandler(w http.ResponseWriter, r *http.R
 func (h *Handler) APIUserURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	userID := h.Facade.GetUserFromContext(r.Context())
-	result, err := h.Facade.APIUserURLFacade(userID)
+	userID, err := h.Facade.GetUserFromContext(r.Context())
+
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		h.log.Error(err.Error())
+		return
+	}
+
+	result, err := h.Facade.APIUserURLFacade(r.Context(), userID)
 
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -289,24 +301,29 @@ func (h *Handler) APIUserURLHandler(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) APIUserDeleteURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	userID := h.Facade.GetUserFromContext(r.Context())
+	userID, err := h.Facade.GetUserFromContext(r.Context())
 
-	if userID != "" {
-		var urls []string
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		h.log.Error(err.Error())
+		return
+	}
 
-		err := json.NewDecoder(r.Body).Decode(&urls)
+	var urls []string
 
-		if err != nil {
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
+	err = json.NewDecoder(r.Body).Decode(&urls)
 
-		err = h.Facade.Store.DeleteBatch(userID, urls)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		h.log.Error(err.Error())
+		return
+	}
 
-		if err != nil {
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
+	err = h.Facade.Store.DeleteBatch(r.Context(), userID, urls)
+
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
 	}
 
 	w.WriteHeader(http.StatusAccepted)
@@ -315,7 +332,7 @@ func (h *Handler) APIUserDeleteURLHandler(w http.ResponseWriter, r *http.Request
 func (h *Handler) APIInternalStats(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	stats, err := h.Facade.Store.GetStats()
+	stats, err := h.Facade.Store.GetStats(r.Context())
 
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

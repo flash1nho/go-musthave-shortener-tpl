@@ -27,9 +27,9 @@ func NewFacade(store *storage.Storage, BaseURL string) *Facade {
 	}
 }
 
-func (f *Facade) PostURLFacade(userID string, originalURL string) (string, error) {
+func (f *Facade) PostURLFacade(ctx context.Context, userID string, originalURL string) (string, error) {
 	shortURL := helpers.GenerateShortURL(originalURL)
-	err := f.Store.Set(shortURL, originalURL, userID)
+	err := f.Store.Set(ctx, shortURL, originalURL, userID)
 
 	if err != nil {
 		return "", err
@@ -54,10 +54,10 @@ func (f *Facade) GetURLFacade(shortURL string) (storage.URLDetails, error) {
 	return URLDetails, nil
 }
 
-func (f *Facade) APIUserURLFacade(userID string) ([]BatchUserShortenResponse, error) {
+func (f *Facade) APIUserURLFacade(ctx context.Context, userID string) ([]BatchUserShortenResponse, error) {
 	var response []BatchUserShortenResponse
 
-	batch, err := f.Store.GetURLsByUserID(userID)
+	batch, err := f.Store.GetURLsByUserID(ctx, userID)
 
 	if err != nil {
 		return response, err
@@ -81,12 +81,12 @@ func (f *Facade) APIUserURLFacade(userID string) ([]BatchUserShortenResponse, er
 	return response, nil
 }
 
-func (f *Facade) GetUserFromContext(ctx context.Context) string {
-	userID, ok := ctx.Value(authenticator.CtxUserKey).(string)
+func (f *Facade) GetUserFromContext(ctx context.Context) (string, error) {
+	userID, err := authenticator.FromContext(ctx)
 
-	if !ok {
-		return ""
+	if err != nil {
+		return "", nil
 	}
 
-	return userID
+	return userID, nil
 }

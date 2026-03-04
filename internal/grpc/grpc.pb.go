@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v3.12.4
-// source: grpc.proto
+// source: internal/grpc/grpc.proto
 
 package grpc
 
@@ -10,7 +10,6 @@ import (
 	reflect "reflect"
 	unsafe "unsafe"
 
-	empty "github.com/golang/protobuf/ptypes/empty"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -31,7 +30,7 @@ type URLShortenRequest struct {
 
 func (x *URLShortenRequest) Reset() {
 	*x = URLShortenRequest{}
-	mi := &file_grpc_proto_msgTypes[0]
+	mi := &file_internal_grpc_grpc_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43,7 +42,7 @@ func (x *URLShortenRequest) String() string {
 func (*URLShortenRequest) ProtoMessage() {}
 
 func (x *URLShortenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_grpc_proto_msgTypes[0]
+	mi := &file_internal_grpc_grpc_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -88,7 +87,7 @@ type URLShortenResponse struct {
 
 func (x *URLShortenResponse) Reset() {
 	*x = URLShortenResponse{}
-	mi := &file_grpc_proto_msgTypes[1]
+	mi := &file_internal_grpc_grpc_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -100,7 +99,7 @@ func (x *URLShortenResponse) String() string {
 func (*URLShortenResponse) ProtoMessage() {}
 
 func (x *URLShortenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_grpc_proto_msgTypes[1]
+	mi := &file_internal_grpc_grpc_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -145,7 +144,7 @@ type URLExpandRequest struct {
 
 func (x *URLExpandRequest) Reset() {
 	*x = URLExpandRequest{}
-	mi := &file_grpc_proto_msgTypes[2]
+	mi := &file_internal_grpc_grpc_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -157,7 +156,7 @@ func (x *URLExpandRequest) String() string {
 func (*URLExpandRequest) ProtoMessage() {}
 
 func (x *URLExpandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_grpc_proto_msgTypes[2]
+	mi := &file_internal_grpc_grpc_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -168,28 +167,28 @@ func (x *URLExpandRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-func (x *URLExpandRequest) GetID() string {
+func (x *URLExpandRequest) GetId() string {
 	if x != nil {
 		return x.ID
 	}
 	return ""
 }
 
-func (x *URLExpandRequest) SetID(v string) {
+func (x *URLExpandRequest) SetId(v string) {
 	x.ID = v
 }
 
 type URLExpandRequest_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	ID string
+	Id string
 }
 
 func (b0 URLExpandRequest_builder) Build() *URLExpandRequest {
 	m0 := &URLExpandRequest{}
 	b, x := &b0, m0
 	_, _ = b, x
-	x.ID = b.ID
+	x.ID = b.Id
 	return m0
 }
 
@@ -202,7 +201,7 @@ type URLExpandResponse struct {
 
 func (x *URLExpandResponse) Reset() {
 	*x = URLExpandResponse{}
-	mi := &file_grpc_proto_msgTypes[3]
+	mi := &file_internal_grpc_grpc_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -214,7 +213,7 @@ func (x *URLExpandResponse) String() string {
 func (*URLExpandResponse) ProtoMessage() {}
 
 func (x *URLExpandResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_grpc_proto_msgTypes[3]
+	mi := &file_internal_grpc_grpc_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -250,16 +249,59 @@ func (b0 URLExpandResponse_builder) Build() *URLExpandResponse {
 	return m0
 }
 
+type UserURLsRequest struct {
+	state         protoimpl.MessageState `protogen:"opaque.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UserURLsRequest) Reset() {
+	*x = UserURLsRequest{}
+	mi := &file_internal_grpc_grpc_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UserURLsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserURLsRequest) ProtoMessage() {}
+
+func (x *UserURLsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_grpc_grpc_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+type UserURLsRequest_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+}
+
+func (b0 UserURLsRequest_builder) Build() *UserURLsRequest {
+	m0 := &UserURLsRequest{}
+	b, x := &b0, m0
+	_, _ = b, x
+	return m0
+}
+
 type UserURLsResponse struct {
 	state         protoimpl.MessageState `protogen:"opaque.v1"`
-	URL           *[]*URLData            `protobuf:"bytes,1,rep,name=url,proto3"`
+	URLs          *[]*URLData            `protobuf:"bytes,1,rep,name=urls,proto3"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UserURLsResponse) Reset() {
 	*x = UserURLsResponse{}
-	mi := &file_grpc_proto_msgTypes[4]
+	mi := &file_internal_grpc_grpc_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -271,7 +313,7 @@ func (x *UserURLsResponse) String() string {
 func (*UserURLsResponse) ProtoMessage() {}
 
 func (x *UserURLsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_grpc_proto_msgTypes[4]
+	mi := &file_internal_grpc_grpc_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -282,44 +324,44 @@ func (x *UserURLsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-func (x *UserURLsResponse) GetUrl() []*URLData {
+func (x *UserURLsResponse) GetUrls() []*URLData {
 	if x != nil {
-		if x.URL != nil {
-			return *x.URL
+		if x.URLs != nil {
+			return *x.URLs
 		}
 	}
 	return nil
 }
 
-func (x *UserURLsResponse) SetUrl(v []*URLData) {
-	x.URL = &v
+func (x *UserURLsResponse) SetUrls(v []*URLData) {
+	x.URLs = &v
 }
 
 type UserURLsResponse_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	Url []*URLData
+	Urls []*URLData
 }
 
 func (b0 UserURLsResponse_builder) Build() *UserURLsResponse {
 	m0 := &UserURLsResponse{}
 	b, x := &b0, m0
 	_, _ = b, x
-	x.URL = &b.Url
+	x.URLs = &b.Urls
 	return m0
 }
 
 type URLData struct {
 	state         protoimpl.MessageState `protogen:"opaque.v1"`
-	ShortURL      string                 `protobuf:"bytes,1,opt,name=short_url,json=short_url,proto3"`
-	OriginalURL   string                 `protobuf:"bytes,2,opt,name=original_url,json=original_url,proto3"`
+	ShortURL      string                 `protobuf:"bytes,1,opt,name=short_url,json=shortUrl,proto3"`
+	OriginalURL   string                 `protobuf:"bytes,2,opt,name=original_url,json=originalUrl,proto3"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *URLData) Reset() {
 	*x = URLData{}
-	mi := &file_grpc_proto_msgTypes[5]
+	mi := &file_internal_grpc_grpc_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -331,7 +373,7 @@ func (x *URLData) String() string {
 func (*URLData) ProtoMessage() {}
 
 func (x *URLData) ProtoReflect() protoreflect.Message {
-	mi := &file_grpc_proto_msgTypes[5]
+	mi := &file_internal_grpc_grpc_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -342,50 +384,49 @@ func (x *URLData) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-func (x *URLData) GetShortURL() string {
+func (x *URLData) GetShortUrl() string {
 	if x != nil {
 		return x.ShortURL
 	}
 	return ""
 }
 
-func (x *URLData) GetOriginalURL() string {
+func (x *URLData) GetOriginalUrl() string {
 	if x != nil {
 		return x.OriginalURL
 	}
 	return ""
 }
 
-func (x *URLData) SetShortURL(v string) {
+func (x *URLData) SetShortUrl(v string) {
 	x.ShortURL = v
 }
 
-func (x *URLData) SetOriginalURL(v string) {
+func (x *URLData) SetOriginalUrl(v string) {
 	x.OriginalURL = v
 }
 
 type URLData_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	ShortURL    string
-	OriginalURL string
+	ShortUrl    string
+	OriginalUrl string
 }
 
 func (b0 URLData_builder) Build() *URLData {
 	m0 := &URLData{}
 	b, x := &b0, m0
 	_, _ = b, x
-	x.ShortURL = b.ShortURL
-	x.OriginalURL = b.OriginalURL
+	x.ShortURL = b.ShortUrl
+	x.OriginalURL = b.OriginalUrl
 	return m0
 }
 
-var File_grpc_proto protoreflect.FileDescriptor
+var File_internal_grpc_grpc_proto protoreflect.FileDescriptor
 
-const file_grpc_proto_rawDesc = "" +
+const file_internal_grpc_grpc_proto_rawDesc = "" +
 	"\n" +
-	"\n" +
-	"grpc.proto\x12\x04grpc\x1a\x1bgoogle/protobuf/empty.proto\"%\n" +
+	"\x18internal/grpc/grpc.proto\x12\x04grpc\"%\n" +
 	"\x11URLShortenRequest\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\",\n" +
 	"\x12URLShortenResponse\x12\x16\n" +
@@ -393,36 +434,37 @@ const file_grpc_proto_rawDesc = "" +
 	"\x10URLExpandRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"+\n" +
 	"\x11URLExpandResponse\x12\x16\n" +
-	"\x06result\x18\x01 \x01(\tR\x06result\"3\n" +
-	"\x10UserURLsResponse\x12\x1f\n" +
-	"\x03url\x18\x01 \x03(\v2\r.grpc.URLDataR\x03url\"I\n" +
+	"\x06result\x18\x01 \x01(\tR\x06result\"\x11\n" +
+	"\x0fUserURLsRequest\"5\n" +
+	"\x10UserURLsResponse\x12!\n" +
+	"\x04urls\x18\x01 \x03(\v2\r.grpc.URLDataR\x04urls\"I\n" +
 	"\aURLData\x12\x1b\n" +
 	"\tshort_url\x18\x01 \x01(\tR\bshortUrl\x12!\n" +
-	"\foriginal_url\x18\x02 \x01(\tR\voriginalUrl2\xd1\x01\n" +
+	"\foriginal_url\x18\x02 \x01(\tR\voriginalUrl2\xd0\x01\n" +
 	"\x10ShortenerService\x12?\n" +
 	"\n" +
 	"ShortenURL\x12\x17.grpc.URLShortenRequest\x1a\x18.grpc.URLShortenResponse\x12<\n" +
-	"\tExpandURL\x12\x16.grpc.URLExpandRequest\x1a\x17.grpc.URLExpandResponse\x12>\n" +
-	"\fListUserURLs\x12\x16.google.protobuf.Empty\x1a\x16.grpc.UserURLsResponseB\vZ\tgrpc/grpcb\x06proto3"
+	"\tExpandURL\x12\x16.grpc.URLExpandRequest\x1a\x17.grpc.URLExpandResponse\x12=\n" +
+	"\fListUserURLs\x12\x15.grpc.UserURLsRequest\x1a\x16.grpc.UserURLsResponseB\vZ\tgrpc/grpcb\x06proto3"
 
-var file_grpc_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
-var file_grpc_proto_goTypes = []any{
+var file_internal_grpc_grpc_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_internal_grpc_grpc_proto_goTypes = []any{
 	(*URLShortenRequest)(nil),  // 0: grpc.URLShortenRequest
 	(*URLShortenResponse)(nil), // 1: grpc.URLShortenResponse
 	(*URLExpandRequest)(nil),   // 2: grpc.URLExpandRequest
 	(*URLExpandResponse)(nil),  // 3: grpc.URLExpandResponse
-	(*UserURLsResponse)(nil),   // 4: grpc.UserURLsResponse
-	(*URLData)(nil),            // 5: grpc.URLData
-	(*empty.Empty)(nil),        // 6: google.protobuf.Empty
+	(*UserURLsRequest)(nil),    // 4: grpc.UserURLsRequest
+	(*UserURLsResponse)(nil),   // 5: grpc.UserURLsResponse
+	(*URLData)(nil),            // 6: grpc.URLData
 }
-var file_grpc_proto_depIDxs = []int32{
-	5, // 0: grpc.UserURLsResponse.url:type_name -> grpc.URLData
+var file_internal_grpc_grpc_proto_depIdxs = []int32{
+	6, // 0: grpc.UserURLsResponse.urls:type_name -> grpc.URLData
 	0, // 1: grpc.ShortenerService.ShortenURL:input_type -> grpc.URLShortenRequest
 	2, // 2: grpc.ShortenerService.ExpandURL:input_type -> grpc.URLExpandRequest
-	6, // 3: grpc.ShortenerService.ListUserURLs:input_type -> google.protobuf.Empty
+	4, // 3: grpc.ShortenerService.ListUserURLs:input_type -> grpc.UserURLsRequest
 	1, // 4: grpc.ShortenerService.ShortenURL:output_type -> grpc.URLShortenResponse
 	3, // 5: grpc.ShortenerService.ExpandURL:output_type -> grpc.URLExpandResponse
-	4, // 6: grpc.ShortenerService.ListUserURLs:output_type -> grpc.UserURLsResponse
+	5, // 6: grpc.ShortenerService.ListUserURLs:output_type -> grpc.UserURLsResponse
 	4, // [4:7] is the sub-list for method output_type
 	1, // [1:4] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
@@ -430,26 +472,26 @@ var file_grpc_proto_depIDxs = []int32{
 	0, // [0:1] is the sub-list for field type_name
 }
 
-func init() { file_grpc_proto_init() }
-func file_grpc_proto_init() {
-	if File_grpc_proto != nil {
+func init() { file_internal_grpc_grpc_proto_init() }
+func file_internal_grpc_grpc_proto_init() {
+	if File_internal_grpc_grpc_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_grpc_proto_rawDesc), len(file_grpc_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_grpc_grpc_proto_rawDesc), len(file_internal_grpc_grpc_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_grpc_proto_goTypes,
-		DependencyIndexes: file_grpc_proto_depIDxs,
-		MessageInfos:      file_grpc_proto_msgTypes,
+		GoTypes:           file_internal_grpc_grpc_proto_goTypes,
+		DependencyIndexes: file_internal_grpc_grpc_proto_depIdxs,
+		MessageInfos:      file_internal_grpc_grpc_proto_msgTypes,
 	}.Build()
-	File_grpc_proto = out.File
-	file_grpc_proto_goTypes = nil
-	file_grpc_proto_depIDxs = nil
+	File_internal_grpc_grpc_proto = out.File
+	file_internal_grpc_grpc_proto_goTypes = nil
+	file_internal_grpc_grpc_proto_depIdxs = nil
 }

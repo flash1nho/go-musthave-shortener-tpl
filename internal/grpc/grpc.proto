@@ -2,14 +2,12 @@ syntax = "proto3";
 
 package grpc;
 
-import "google/protobuf/empty.proto";
-
 option go_package = "grpc/grpc";
 
 service ShortenerService {
   rpc ShortenURL (URLShortenRequest) returns (URLShortenResponse);
   rpc ExpandURL (URLExpandRequest) returns (URLExpandResponse);
-  rpc ListUserURLs (google.protobuf.Empty) returns (UserURLsResponse);
+  rpc ListUserURLs (UserURLsRequest) returns (UserURLsResponse);
 }
 
 message URLShortenRequest {
@@ -28,8 +26,11 @@ message URLExpandResponse {
   string result = 1;
 }
 
+message UserURLsRequest {
+}
+
 message UserURLsResponse {
-  repeated URLData url = 1;
+  repeated URLData urls = 1;
 }
 
 message URLData {
