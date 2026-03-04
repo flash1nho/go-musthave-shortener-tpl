@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,6 +13,10 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+
+	pb "github.com/flash1nho/go-musthave-shortener-tpl/internal/grpc"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
 	"github.com/flash1nho/go-musthave-shortener-tpl/internal/handler"
@@ -25,24 +30,28 @@ import (
 )
 
 type Service struct {
-	handler     *handler.Handler
-	servers     []config.Server
-	log         *zap.Logger
-	auditFile   string
-	auditURL    string
-	enableHTTPS bool
+	handler       *handler.Handler
+	gHandler      *pb.GrpcHandler
+	servers       []config.Server
+	log           *zap.Logger
+	auditFile     string
+	auditURL      string
+	enableHTTPS   bool
+	trustedSubnet string
 }
 
-func NewService(handler *handler.Handler, settings config.SettingsObject) *Service {
+func NewService(handler *handler.Handler, gHandler *pb.GrpcHandler, settings config.SettingsObject) *Service {
 	servers := []config.Server{settings.Server1, settings.Server2}
 
 	return &Service{
-		handler:     handler,
-		servers:     servers,
-		log:         settings.Log,
-		auditFile:   settings.AuditFile,
-		auditURL:    settings.AuditURL,
-		enableHTTPS: settings.EnableHTTPS,
+		handler:       handler,
+		gHandler:      gHandler,
+		servers:       servers,
+		log:           settings.Log,
+		auditFile:     settings.AuditFile,
+		auditURL:      settings.AuditURL,
+		enableHTTPS:   settings.EnableHTTPS,
+		trustedSubnet: settings.TrustedSubnet,
 	}
 }
 
@@ -69,10 +78,15 @@ func (s *Service) mainRouter() http.Handler {
 			subject.Register(&middlewares.URLObserver{URL: s.auditURL, Log: s.log, Client: retryablehttp.NewClient()})
 		}
 
-		r.Use(middlewares.AuditMiddleware(subject))
+		r.Use(middlewares.Audit(subject))
 		r.Post("/", s.handler.PostURLHandler)
 		r.Post("/api/shorten", s.handler.APIShortenPostURLHandler)
 		r.Get("/{id}", s.handler.GetURLHandler)
+	})
+
+	r.Group(func(r chi.Router) {
+		r.Use(middlewares.TrustedSubnet(s.trustedSubnet))
+		r.Get("/api/internal/stats", s.handler.APIInternalStats)
 	})
 
 	return r
@@ -95,21 +109,21 @@ func runServer(ctx context.Context, s *Service, addr string) {
 			err := server.ListenAndServeTLS("cert.pem", "key.pem")
 
 			if err != nil && err != http.ErrServerClosed {
-				s.log.Error(fmt.Sprintf("Ошибка запуска сервера https://%s: %v", server.Addr, err))
+				s.log.Error("Ошибка запуска сервера", zap.String("https://", server.Addr), zap.Error(err))
 			}
 		} else {
 			s.log.Info(fmt.Sprintf("Сервер запущен на http://%s", server.Addr))
 			err := server.ListenAndServe()
 
 			if err != nil && err != http.ErrServerClosed {
-				s.log.Error(fmt.Sprintf("Ошибка запуска сервера http://%s: %v", server.Addr, err))
+				s.log.Error("Ошибка запуска сервера", zap.String("http://", server.Addr), zap.Error(err))
 			}
 		}
 	}()
 
 	select {
 	case err := <-serverErr:
-		s.log.Info(fmt.Sprint(err))
+		s.log.Error(err.Error())
 	case <-ctx.Done():
 		s.log.Info(fmt.Sprintf("Завершение работы сервера http://%s", server.Addr))
 
@@ -117,16 +131,46 @@ func runServer(ctx context.Context, s *Service, addr string) {
 		defer cancel()
 
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			s.log.Error(fmt.Sprintf("Ошибка завершения работы сервера http://%s: %v", server.Addr, err))
+			s.log.Error("Ошибка завершения работы сервера", zap.String("https://", server.Addr), zap.Error(err))
 		} else {
 			s.log.Info(fmt.Sprintf("Сервер http://%s успешно остановлен", server.Addr))
 		}
+	}
+}
 
-		s.log.Info("Сохранение данных в хранилище...")
+func runGrpcServer(ctx context.Context, s *Service) {
+	serverErr := make(chan error, 1)
+	creds := insecure.NewCredentials()
+	grpcServer := grpc.NewServer(
+		grpc.Creds(creds),
+		grpc.UnaryInterceptor(pb.Auth),
+	)
 
-		if err := s.handler.Store.Close(); err != nil {
-			s.log.Error(fmt.Sprintf("Ошибка при сохранении данных: %v", err))
+	go func() {
+		listen, err := net.Listen("tcp", ":3200")
+
+		if err == nil {
+			pb.RegisterShortenerServiceServer(grpcServer, s.gHandler)
+
+			s.log.Info("сервер gRPC начал работу")
+
+			if err := grpcServer.Serve(listen); err != nil {
+				s.log.Error("Ошибка при работе gRPC сервера", zap.Error(err))
+			}
+		} else {
+			s.log.Error("Ошибка при инициализации gRPC listener", zap.Error(err))
 		}
+	}()
+
+	select {
+	case err := <-serverErr:
+		s.log.Error(err.Error())
+	case <-ctx.Done():
+		s.log.Info("Завершение работы gRPC сервера")
+
+		grpcServer.GracefulStop()
+
+		s.log.Info("gRPC сервер успешно остановлен")
 	}
 }
 
@@ -145,8 +189,19 @@ func (s *Service) Run() {
 		})
 	}
 
+	g.Go(func() error {
+		runGrpcServer(ctx, s)
+		return nil
+	})
+
 	if err := g.Wait(); err != nil && !errors.Is(err, context.Canceled) {
-		s.log.Error(fmt.Sprintf("Работа завершена с ошибкой: %v", err))
+		s.log.Error("Работа завершена с ошибкой", zap.Error(err))
+	}
+
+	s.log.Info("Сохранение данных в хранилище...")
+
+	if err := s.handler.Facade.Store.Close(); err != nil {
+		s.log.Error("Ошибка при сохранении данных", zap.Error(err))
 	}
 
 	s.log.Info("Все серверы успешно завершили работу.")

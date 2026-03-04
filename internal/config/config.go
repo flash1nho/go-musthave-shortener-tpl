@@ -26,17 +26,19 @@ type Config struct {
 	AuditURL        string `json:"-" env:"AUDIT_URL"`
 	EnableHTTPS     bool   `json:"enable_https" env:"ENABLE_HTTPS"`
 	ConfigPath      string `json:"-" env:"CONFIG"`
+	TrustedSubnet   string `json:"trusted_subnet" env:"TRUSTED_SUBNET"`
 }
 
 type SettingsObject struct {
-	Server1     Server
-	Server2     Server
-	Log         *zap.Logger
-	DatabaseDSN string
-	FilePath    string
-	AuditFile   string
-	AuditURL    string
-	EnableHTTPS bool
+	Server1       Server
+	Server2       Server
+	Log           *zap.Logger
+	DatabaseDSN   string
+	FilePath      string
+	AuditFile     string
+	AuditURL      string
+	EnableHTTPS   bool
+	TrustedSubnet string
 }
 
 type Server struct {
@@ -85,14 +87,15 @@ func Settings() SettingsObject {
 	}
 
 	return SettingsObject{
-		Server1:     Server{Addr: finalCfg.ServerAddress, BaseURL: finalCfg.BaseURL},
-		Server2:     Server{Addr: finalCfg.ServerAddress, BaseURL: finalCfg.BaseURL},
-		Log:         logger.Log,
-		DatabaseDSN: finalCfg.DatabaseDSN,
-		FilePath:    finalCfg.FileStoragePath,
-		AuditFile:   finalCfg.AuditFile,
-		AuditURL:    finalCfg.AuditURL,
-		EnableHTTPS: finalCfg.EnableHTTPS,
+		Server1:       Server{Addr: finalCfg.ServerAddress, BaseURL: finalCfg.BaseURL},
+		Server2:       Server{Addr: finalCfg.ServerAddress, BaseURL: finalCfg.BaseURL},
+		Log:           logger.Log,
+		DatabaseDSN:   finalCfg.DatabaseDSN,
+		FilePath:      finalCfg.FileStoragePath,
+		AuditFile:     finalCfg.AuditFile,
+		AuditURL:      finalCfg.AuditURL,
+		EnableHTTPS:   finalCfg.EnableHTTPS,
+		TrustedSubnet: finalCfg.TrustedSubnet,
 	}
 }
 
@@ -105,6 +108,7 @@ func parseFlags() Config {
 	file := flag.String("f", "", "путь к файлу для хранения данных")
 	aFile := flag.String("audit-file", "", "путь к файлу-приёмнику, в который сохраняются логи аудита")
 	aURL := flag.String("audit-url", "", "полный URL удаленного сервера-приёмника, куда отправляются логи аудита")
+	trustedSubnet := flag.String("t", "", "доверенная подсеть")
 	conf := flag.String("c", "", "Файл конфигурации")
 	flag.StringVar(conf, "config", "", "Файл конфигурации")
 	enableHTTPS := flag.Bool("s", false, "Enable HTTPS")
@@ -118,6 +122,7 @@ func parseFlags() Config {
 	c.ConfigPath = *conf
 	c.AuditFile = *aFile
 	c.AuditURL = *aURL
+	c.TrustedSubnet = *trustedSubnet
 
 	// С bool сложнее: флаг всегда false по умолчанию.
 	// Проверяем, был ли он явно передан в командной строке.
@@ -138,6 +143,7 @@ func parseEnv() Config {
 		AuditFile:       os.Getenv("AUDIT_FILE"),
 		AuditURL:        os.Getenv("AUDIT_URL"),
 		EnableHTTPS:     os.Getenv("ENABLE_HTTPS") == "true",
+		TrustedSubnet:   os.Getenv("TRUSTED_SUBNET"),
 	}
 }
 

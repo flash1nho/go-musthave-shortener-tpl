@@ -11,30 +11,49 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/flash1nho/go-musthave-shortener-tpl/internal/authenticator"
 	"github.com/flash1nho/go-musthave-shortener-tpl/internal/config"
+	"github.com/flash1nho/go-musthave-shortener-tpl/internal/facade"
 	"github.com/flash1nho/go-musthave-shortener-tpl/internal/helpers"
-	"github.com/flash1nho/go-musthave-shortener-tpl/internal/middlewares"
 	"github.com/flash1nho/go-musthave-shortener-tpl/internal/storage"
 
 	"github.com/stretchr/testify/assert"
 )
 
-var userID, _ = middlewares.GenerateUniqueUserID()
+type TestData struct {
+	h           *Handler
+	originalURL string
+	shortURL    string
+	userID      string
+}
 
-func testData() (h *Handler, originalURL string, shortURL string) {
+func testData(tb testing.TB) (*TestData, error) {
+	tb.Helper()
+
 	store, _ := storage.NewStorage("", "")
 	server := config.Server{Addr: config.DefaultHost, BaseURL: config.DefaultURL}
 	settings := config.SettingsObject{Server1: server, Server2: server}
-	h = NewHandler(store, settings)
-	originalURL = "https://practicum.yandex.ru"
-	shortURL = helpers.GenerateShortURL(originalURL)
+	f := facade.NewFacade(store, settings.Server2.BaseURL)
+	h := NewHandler(f, settings)
+	originalURL := "https://practicum.yandex.ru"
+	shortURL := helpers.GenerateShortURL(originalURL)
+	userID, err := authenticator.GenerateUniqueUserID()
 
-	return h, originalURL, shortURL
+	if err != nil {
+		return nil, err
+	}
+
+	return &TestData{h: h, originalURL: originalURL, shortURL: shortURL, userID: userID}, nil
 }
 
 func TestPostURLHandler(t *testing.T) {
-	h, originalURL, shortURL := testData()
-	shortURL, _ = url.JoinPath(h.server.BaseURL, shortURL)
+	data, err := testData(t)
+
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	shortURL, _ := url.JoinPath(data.h.Facade.BaseURL, data.shortURL)
 
 	// описываем набор данных: метод запроса, ожидаемый код ответа, тело ответа, тело запроса
 	testCases := []struct {
@@ -44,7 +63,7 @@ func TestPostURLHandler(t *testing.T) {
 		requestBody  string
 	}{
 		{method: http.MethodPost, status: http.StatusBadRequest, responseBody: "body is missing", requestBody: ""},
-		{method: http.MethodPost, status: http.StatusCreated, responseBody: shortURL, requestBody: originalURL},
+		{method: http.MethodPost, status: http.StatusCreated, responseBody: shortURL, requestBody: data.originalURL},
 	}
 
 	for _, tc := range testCases {
@@ -52,11 +71,11 @@ func TestPostURLHandler(t *testing.T) {
 			r := httptest.NewRequest(tc.method, "/", strings.NewReader(tc.requestBody))
 			w := httptest.NewRecorder()
 
-			ctx := context.WithValue(r.Context(), middlewares.CtxUserKey, userID)
+			ctx := context.WithValue(r.Context(), authenticator.GetUserKey(), data.userID)
 			r = r.WithContext(ctx)
 
 			// вызовем хендлер как обычную функцию, без запуска самого сервера
-			h.PostURLHandler(w, r)
+			data.h.PostURLHandler(w, r)
 
 			assert.Equal(t, tc.status, w.Code, "Код ответа не совпадает с ожидаемым")
 			// проверим корректность полученного тела ответа, если мы его ожидаем
@@ -68,8 +87,13 @@ func TestPostURLHandler(t *testing.T) {
 }
 
 func TestGetURLHandler(t *testing.T) {
-	h, originalURL, shortURL := testData()
-	h.Store.Set(shortURL, originalURL, "")
+	data, err := testData(t)
+
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	data.h.Facade.Store.Set(t.Context(), data.shortURL, data.originalURL, "")
 
 	// описываем набор данных: метод запроса, ожидаемый код ответа, тело ответа, path запроса
 	testCases := []struct {
@@ -79,8 +103,8 @@ func TestGetURLHandler(t *testing.T) {
 		path         string
 	}{
 		{method: http.MethodGet, status: http.StatusBadRequest, responseBody: "id parameter is missing", path: "/"},
-		{method: http.MethodGet, status: http.StatusBadRequest, responseBody: "Short URL not found", path: "/short_url_not_found"},
-		{method: http.MethodGet, status: http.StatusTemporaryRedirect, responseBody: "", path: "/" + shortURL},
+		{method: http.MethodGet, status: http.StatusBadRequest, responseBody: "short URL not found", path: "/short_url_not_found"},
+		{method: http.MethodGet, status: http.StatusTemporaryRedirect, responseBody: "", path: "/" + data.shortURL},
 	}
 
 	for _, tc := range testCases {
@@ -89,7 +113,7 @@ func TestGetURLHandler(t *testing.T) {
 			w := httptest.NewRecorder()
 
 			// вызовем хендлер как обычную функцию, без запуска самого сервера
-			h.GetURLHandler(w, r)
+			data.h.GetURLHandler(w, r)
 
 			assert.Equal(t, tc.status, w.Code, "Код ответа не совпадает с ожидаемым")
 			// проверим корректность полученного тела ответа, если мы его ожидаем
@@ -101,11 +125,16 @@ func TestGetURLHandler(t *testing.T) {
 }
 
 func TestAPIShortenPostURLHandler(t *testing.T) {
-	h, originalURL, shortURL := testData()
-	shortURL, _ = url.JoinPath(h.server.BaseURL, shortURL)
+	data, err := testData(t)
+
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	shortURL, _ := url.JoinPath(data.h.Facade.BaseURL, data.shortURL)
 
 	requestData := ShortenRequest{
-		URL: originalURL,
+		URL: data.originalURL,
 	}
 	requestJSONBytes, _ := json.Marshal(requestData)
 	requestBody := string(requestJSONBytes)
@@ -134,7 +163,7 @@ func TestAPIShortenPostURLHandler(t *testing.T) {
 			w := httptest.NewRecorder()
 
 			// вызовем хендлер как обычную функцию, без запуска самого сервера
-			h.APIShortenPostURLHandler(w, r)
+			data.h.APIShortenPostURLHandler(w, r)
 
 			assert.Equal(t, tc.status, w.Code, "Код ответа не совпадает с ожидаемым")
 			// проверим корректность полученного тела ответа, если мы его ожидаем
@@ -146,12 +175,17 @@ func TestAPIShortenPostURLHandler(t *testing.T) {
 }
 
 func TestAPIShortenBatchPostURLHandler(t *testing.T) {
-	h, originalURL, shortURL := testData()
-	shortURL, _ = url.JoinPath(h.server.BaseURL, shortURL)
+	data, err := testData(t)
+
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	shortURL, _ := url.JoinPath(data.h.Facade.BaseURL, data.shortURL)
 	correlationID := "1"
 
 	var requestData []BatchShortenRequest
-	requestData = append(requestData, BatchShortenRequest{CorrelationID: correlationID, OriginalURL: originalURL})
+	requestData = append(requestData, BatchShortenRequest{CorrelationID: correlationID, OriginalURL: data.originalURL})
 	requestJSONBytes, _ := json.Marshal(requestData)
 	requestBody := string(requestJSONBytes)
 
@@ -178,7 +212,7 @@ func TestAPIShortenBatchPostURLHandler(t *testing.T) {
 			w := httptest.NewRecorder()
 
 			// вызовем хендлер как обычную функцию, без запуска самого сервера
-			h.APIShortenBatchPostURLHandler(w, r)
+			data.h.APIShortenBatchPostURLHandler(w, r)
 
 			assert.Equal(t, tc.status, w.Code, "Код ответа не совпадает с ожидаемым")
 			// проверим корректность полученного тела ответа, если мы его ожидаем
@@ -190,8 +224,13 @@ func TestAPIShortenBatchPostURLHandler(t *testing.T) {
 }
 
 func TestAPIUserURLHandler(t *testing.T) {
-	h, originalURL, shortURL := testData()
-	shortURL, _ = url.JoinPath(h.server.BaseURL, shortURL)
+	data, err := testData(t)
+
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	shortURL, _ := url.JoinPath(data.h.Facade.BaseURL, data.shortURL)
 
 	// описываем набор данных: метод запроса, ожидаемый код ответа, тело ответа, тело запроса
 	testCases := []struct {
@@ -208,15 +247,15 @@ func TestAPIUserURLHandler(t *testing.T) {
 			r := httptest.NewRequest(tc.method, "/", strings.NewReader(tc.requestBody))
 			w := httptest.NewRecorder()
 
-			ctx := context.WithValue(r.Context(), middlewares.CtxUserKey, userID)
+			ctx := context.WithValue(r.Context(), authenticator.GetUserKey(), data.userID)
 			r = r.WithContext(ctx)
 
 			if tc.status == http.StatusOK {
-				h.Store.Set(shortURL, originalURL, userID)
+				data.h.Facade.Store.Set(r.Context(), shortURL, data.originalURL, data.userID)
 			}
 
 			// вызовем хендлер как обычную функцию, без запуска самого сервера
-			h.APIUserURLHandler(w, r)
+			data.h.APIUserURLHandler(w, r)
 
 			assert.Equal(t, tc.status, w.Code, "Код ответа не совпадает с ожидаемым")
 		})
@@ -224,9 +263,14 @@ func TestAPIUserURLHandler(t *testing.T) {
 }
 
 func BenchmarkPostURLHandler(b *testing.B) {
-	h, _, shortURL := testData()
-	shortURL, _ = url.JoinPath(h.server.BaseURL, shortURL)
-	ctx := context.WithValue(context.Background(), middlewares.CtxUserKey, userID)
+	data, err := testData(b)
+
+	if err != nil {
+		b.Error(err.Error())
+	}
+
+	shortURL, _ := url.JoinPath(data.h.Facade.BaseURL, data.shortURL)
+	ctx := context.WithValue(context.Background(), authenticator.GetUserKey(), data.userID)
 
 	b.ResetTimer()
 
@@ -240,6 +284,6 @@ func BenchmarkPostURLHandler(b *testing.B) {
 
 		b.StartTimer()
 
-		h.PostURLHandler(w, r)
+		data.h.PostURLHandler(w, r)
 	}
 }
